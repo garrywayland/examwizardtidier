@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Exam Paper Builder</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
+<style>
+  :root {
+    --ink: #1b1b1b;
+    --paper: #fefefe;
+    --rule: #d8d3c8;
+    --accent: #6b5a3e;
+    --panel: #f4f1ea;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--serif);
+    background: var(--panel);
+    color: var(--ink);
+  }
+
+  /* ---------- Control bar (screen only) ---------- */
+  #controls {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--ink); color: #f4f1ea;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 13px;
+  }
+  #controls h1 {
+    font-family: var(--serif); font-size: 17px; font-weight: 600;
+    margin: 0; letter-spacing: 0.2px; color: #fff;
+  }
+  #controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  #controls input[type="file"] {
+    color: #f4f1ea; font-family: var(--mono); font-size: 12px; max-width: 220px;
+  }
+  #controls select, #controls button {
+    font-family: var(--mono); font-size: 13px;
+    background: #2a2a26; color: #f4f1ea; border: 1px solid #504a3d;
+    padding: 6px 10px; border-radius: 3px; cursor: pointer;
+  }
+  #controls button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #status { font-size: 12px; opacity: 0.8; }
+  .spacer { flex: 1; }
+
+  /* ---------- Sizing review panel ---------- */
+  #sizing-panel {
+    display: none;
+    max-width: 900px; margin: 24px auto; background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 20px 24px;
+  }
+  #sizing-panel h2 { font-size: 18px; margin-top: 0; }
+  #sizing-panel p { font-size: 14px; color: #555; font-family: var(--mono); }
+  .size-row {
+    display: flex; align-items: center; gap: 16px;
+    border-bottom: 1px solid var(--rule); padding: 10px 0;
+  }
+  .size-row img { max-width: 160px; max-height: 110px; border: 1px solid var(--rule); background: #fff; }
+  .size-row select { font-family: var(--mono); font-size: 13px; padding: 4px; margin: 2px 6px 2px 0; }
+  .size-row .fname { font-family: var(--mono); font-size: 11px; color: #888; }
+
+  /* ---------- Paper / preview ---------- */
+  #paper {
+    max-width: 800px; margin: 24px auto 80px; background: var(--paper);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15); padding: 36px 44px;
+    display: none;
+  }
+  #paper[contenteditable="true"] { cursor: text; outline: none; }
+  #paper[contenteditable="true"] .question:hover { background: rgba(107,90,62,0.04); }
+  #paper[contenteditable="true"]:focus .question:focus-within {
+    outline: 1px dashed var(--accent); outline-offset: 4px;
+  }
+  #edit-hint {
+    max-width: 800px; margin: 0 auto; padding: 8px 4px 0;
+    font-family: var(--mono); font-size: 12px; color: #6b6a63; display: none;
+  }
+  #paper.compressed .question { break-inside: avoid; margin-bottom: 10px; }
+  #paper.compressed .qbody { font-size: 14px; line-height: 1.35; }
+  #paper.compressed img.diagram { display: block; margin: 6px auto; }
+  #paper.compressed .marks { font-style: italic; font-size: 12.5px; color: #555; float: right; }
+  #paper.compressed .part { margin: 2px 0 2px 22px; }
+
+  #paper.exam .question { break-inside: avoid; page-break-after: always; padding-bottom: 4px; }
+  #paper.exam .question:last-child { page-break-after: auto; }
+  #paper.exam .qbody { font-size: 16px; line-height: 1.6; }
+  #paper.exam img.diagram { display: block; margin: 14px auto; }
+  #paper.exam .marks { font-style: italic; font-size: 14px; color: #555; float: right; }
+  #paper.exam .part { margin: 14px 0 14px 0; }
+  #paper.exam .answer-space { border-bottom: none; }
+
+  .qhead {
+    font-weight: 700; margin-bottom: 4px;
+  }
+  .qtitle { display: flex; justify-content: space-between; align-items: baseline; }
+  .qtotal { font-style: italic; color: #555; text-align: right; margin-top: 4px; }
+  #paper.compressed .qtotal { font-size: 12.5px; margin-bottom: 4px; }
+  #paper.exam .qtotal { font-size: 14px; margin-top: 8px; }
+  h1.papertitle { font-size: 24px; margin: 0 0 18px; }
+  em { font-style: italic; }
+  strong { font-weight: 700; }
+  img.diagram { max-width: 100%; height: auto; }
+  .eq-rendered { display: inline-block; vertical-align: middle; margin: 0 2px; cursor: pointer; }
+  .eq-failed { outline: 1px dashed #c0392b; }
+  img[data-eq-candidate] { cursor: pointer; }
+  img[data-eq-candidate]:hover, .eq-rendered:hover { outline: 1px dashed #8a7a5c; }
+
+  /* ---------- Print ---------- */
+  @media print {
+    #controls, #sizing-panel { display: none !important; }
+    body { background: #fff; }
+    #paper { box-shadow: none; margin: 0; max-width: none; padding: 0; display: block !important; }
+    @page { size: A4; margin: 8mm; }
+  }
+
+  /* ---------- Float containment / page-break fixes ----------
+     .marks and .answer-hint are float:right; without a clearfix a floated
+     last child doesn't get "counted" in its parent's height, so the next
+     element (e.g. the question's [Total: N marks] line) can visually creep
+     up alongside it instead of sitting cleanly underneath. */
+  /* Only clear at the .part/.question container level - NOT after every
+     paragraph. An earlier per-paragraph clearfix (.qbody p::after) fixed
+     the marks/total-marks float bug but also killed genuine text-wrap:
+     it cleared the float before the very next paragraph could ever flow
+     beside it. The container-level clear below still fully contains a
+     float before the next sibling (.marks, .qtotal, the next part) - it
+     just no longer clears mid-section, so wrap-around images now work
+     across multiple paragraphs within the same part/intro. */
+  .part::after, .question::after {
+    content: ""; display: block; clear: both;
+  }
+  .qtotal { clear: both; }
+
+  /* A diagram must never get sliced in half across a page break, in either
+     mode - that's the one thing worth forcing regardless of space cost. */
+  img.diagram, img[data-base-w] { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Exam mode only: keep a lettered part glued to its own writing-space box
+     (a break must never land between a part's text and its answer space,
+     or split the part's text itself). In compressed mode this same rule
+     used to force a WHOLE part - text and diagrams together - onto a fresh
+     page rather than letting text flow up to fill the space above a large
+     diagram, which is what was producing big blank gaps on pages whose next
+     part happened to contain a tall image. Compressed mode now only
+     protects the image itself (above), so text can pack in around it. */
+  #paper.exam .part, #paper.exam .part-block, #paper.exam .answer-space {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+
+  .answer-hint { float: right; font-style: italic; color: #555; margin-left: 10px; }
+  #paper.compressed .answer-hint { font-size: 12.5px; }
+  #paper.exam .answer-hint { font-size: 14px; }
+
+  /* ---------- Image text-wrap ----------
+     !important throughout: only RTF images carry class="diagram", and the
+     mode-specific "#paper.compressed/exam img.diagram" rules above (and the
+     baseline "img.diagram{max-width:100%}") out-specify a plain class
+     selector for max-width/margin. Without !important, an RTF diagram at
+     the medium/large size bucket (40-62% width) never actually got capped
+     down to the 45% wrap column, so there was no room left for text to
+     wrap into - it only ever worked for ExamBuilder images, which don't
+     carry that class and so never hit the conflict. */
+  .diagram-wrap-left, .diagram-wrap-right {
+    max-width: 45% !important; height: auto !important;
+  }
+  .diagram-wrap-left  { float: left !important;  margin: 4px 16px 10px 0 !important; }
+  .diagram-wrap-right { float: right !important; margin: 4px 0 10px 16px !important; }
+
+  /* ---------- On-screen page break preview ---------- */
+  .page-break-line { position: relative; margin: 20px 0; border-top: 1px dashed #b8a888; }
+  .page-break-line span {
+    position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+    background: var(--paper); padding: 0 10px;
+    font-family: var(--mono); font-size: 10.5px; color: #9a8f78; letter-spacing: 0.4px;
+    white-space: nowrap;
+  }
+  @media print { .page-break-line { display: none !important; } }
+
+  /* ---------- Cover page ---------- */
+  .coverpage {
+    break-after: page; page-break-after: always;
+    min-height: 235mm; display: flex; flex-direction: column; justify-content: center; gap: 10px;
+  }
+  .coverpage .cp-testname {
+    font-size: 30px; font-weight: 700; text-align: center; font-family: var(--serif); outline: none;
+  }
+  .coverpage .cp-row { display: flex; align-items: baseline; gap: 14px; font-size: 16px; margin: 18px 0; }
+  .coverpage .cp-row .cp-line { flex: 1; border-bottom: 1px solid var(--ink); height: 30px; }
+  .coverpage .cp-meta {
+    display: flex; justify-content: space-between; margin-top: 50px;
+    font-size: 14px; font-family: var(--mono); color: #444; border-top: 1px solid var(--rule); padding-top: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <h1>Exam Paper Builder</h1>
+  <label>Source file
+    <input type="file" id="fileInput" accept=".doc,.rtf">
+  </label>
+  <span id="formatHint" style="opacity:0.6;">Accepts ExamWizard (Edexcel) or ExamBuilder (OCR) .doc exports — format is auto-detected.</span>
+  <label>Layout
+    <select id="modeSelect">
+      <option value="compressed">Compressed (revision sheet)</option>
+      <option value="exam">Exam layout (1 question / page)</option>
+    </select>
+  </label>
+  <button id="reviewBtn" disabled>Review diagram sizes</button>
+  <button id="ocrBtn" disabled style="display:none;">Transcribe equations (OCR)</button>
+  <label><input type="checkbox" id="coverToggle"> Cover page</label>
+  <label><input type="checkbox" id="flattenToggle"> One line per section</label>
+  <label>Default wrap
+    <select id="defaultWrapSelect">
+      <option value="none">Off</option>
+      <option value="left">Image left</option>
+      <option value="right">Image right</option>
+    </select>
+  </label>
+  <span class="spacer"></span>
+  <span id="status">Upload an ExamWizard (Edexcel) .doc file to begin.</span>
+  <button id="printBtn" disabled>Print / Save as PDF</button>
+  <button id="pdfBtn" class="primary" disabled>Download PDF</button>
+  <button id="texBtn" disabled>Download LaTeX</button>
+</div>
+
+<div id="sizing-panel">
+  <h2>Diagram sizes</h2>
+  <p>Defaults are guessed from each image's native resolution relative to the others in this
+     paper. Adjust anything that looks wrong, then close this panel — the preview updates live.</p>
+  <div id="sizeRows"></div>
+  <button id="closeSizing" style="margin-top:14px;font-family:var(--mono);padding:8px 16px;">Done</button>
+</div>
+
+<div id="paper" class="compressed"></div>
+<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Click an equation-sized image to type its LaTeX by hand (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
+
+<script>
+/* =========================================================================
+   1. RTF TOKENIZER
+   Ported from the Python prototype. Walks the RTF byte/char stream tracking
+   group nesting, control words, bold/italic state, and \pict blobs
+   (jpeg/png only). Produces a flat array of "runs":
+     {type:'text', text, bold, italic}  or  {type:'img', url}
+   ========================================================================= */
+function parseRTF(data) {
+  const runs = [];
+  let bold = false, italic = false;
+  let buf = [];
+  const flush = () => {
+    if (buf.length) {
+      runs.push({type: 'text', text: buf.join(''), bold, italic});
+      buf = [];
+    }
+  };
+
+  let i = 0;
+  const n = data.length;
+  const ctrlWordRe = /^\\([a-zA-Z]+)(-?\d+)?[ ]?/;
+
+  while (i < n) {
+    const c = data[i];
+    if (c === '{' || c === '}') { i++; continue; } // group depth ignored for this simplified pass
+    if (c === '\\') {
+      const rest = data.substr(i, 40);
+      const m = rest.match(ctrlWordRe);
+      if (m) {
+        const word = m[1], arg = m[2];
+        const consumed = m[0].length;
+        if (word === 'pict') {
+          // Find end of this \pict group (matching closing brace)
+          let j = i + consumed;
+          let localDepth = 0;
+          while (j < n) {
+            if (data[j] === '{') localDepth++;
+            else if (data[j] === '}') {
+              if (localDepth === 0) break;
+              localDepth--;
+            }
+            j++;
+          }
+          const blob = data.substring(i + consumed, j);
+          const headerRegion = blob.substring(0, 2000);
+          let ext = null, kw = null;
+          if (headerRegion.includes('jpegblip')) { ext = 'image/jpeg'; kw = 'jpegblip'; }
+          else if (headerRegion.includes('pngblip')) { ext = 'image/png'; kw = 'pngblip'; }
+          if (ext) {
+            const kwPos = blob.indexOf(kw);
+            const hexRegion = kwPos !== -1 ? blob.substring(kwPos + kw.length) : blob;
+            const hexStr = hexRegion.replace(/[^0-9a-fA-F]/g, '');
+            if (hexStr.length >= 4) {
+              const byteLen = Math.floor(hexStr.length / 2);
+              const bytes = new Uint8Array(byteLen);
+              for (let k = 0; k < byteLen; k++) {
+                bytes[k] = parseInt(hexStr.substr(k * 2, 2), 16);
+              }
+              const blobObj = new Blob([bytes], {type: ext});
+              const url = URL.createObjectURL(blobObj);
+              flush();
+              runs.push({type: 'img', url});
+            }
+          }
+          i = j;
+          continue;
+        } else if (word === 'par' || word === 'line') {
+          buf.push('\n'); i += consumed; continue;
+        } else if (word === 'tab') {
+          buf.push('\t'); i += consumed; continue;
+        } else if (word === 'b') {
+          flush(); bold = (arg !== '0'); i += consumed; continue;
+        } else if (word === 'i') {
+          flush(); italic = (arg !== '0'); i += consumed; continue;
+        } else if (word === 'u') {
+          let cp = parseInt(arg, 10);
+          if (cp < 0) cp += 65536;
+          try { buf.push(String.fromCodePoint(cp)); } catch (e) {}
+          i += consumed;
+          if (i < n && data[i] === '?') i++;
+          continue;
+        } else {
+          i += consumed; continue;
+        }
+      } else {
+        const m2 = data.substr(i, 4).match(/^\\'([0-9a-fA-F]{2})/);
+        if (m2) {
+          buf.push(String.fromCharCode(parseInt(m2[1], 16)));
+          i += m2[0].length; continue;
+        }
+        if (i + 1 < n && '{}\\'.includes(data[i+1])) {
+          buf.push(data[i+1]); i += 2; continue;
+        }
+        i++; continue;
+      }
+    } else {
+      buf.push(c); i++;
+    }
+  }
+  flush();
+  return runs;
+}
+
+/* =========================================================================
+   2. QUESTION GROUPING
+   Build a plaintext shadow of the runs (one placeholder char per image) so
+   we can regex-split on "Qn." / "(a)" / "(Total for question = N marks)"
+   the same way as the plaintext, then slice the ORIGINAL runs at matching
+   offsets. This keeps bold/italic/image info intact per fragment without
+   ever needing to "re-balance" open/close markers.
+   ========================================================================= */
+const IMG_PLACEHOLDER = '\u0000';
+
+function runsToIndexedText(runs) {
+  const chars = [];
+  const runOf = [];
+  runs.forEach((r, idx) => {
+    if (r.type === 'img') {
+      chars.push(IMG_PLACEHOLDER); runOf.push(idx);
+    } else {
+      for (const ch of r.text) { chars.push(ch); runOf.push(idx); }
+    }
+  });
+  return {text: chars.join(''), runOf};
+}
+
+function sliceRuns(runs, runOf, start, end) {
+  if (start >= end) return [];
+  const out = [];
+  const ridxStart = runOf[start], ridxEnd = runOf[end - 1];
+  for (let ridx = ridxStart; ridx <= ridxEnd; ridx++) {
+    const r = runs[ridx];
+    if (r.type === 'img') { out.push(r); continue; }
+    let lo = null, hi = null;
+    for (let off = start; off < end; off++) {
+      if (runOf[off] === ridx) { if (lo === null) lo = off; hi = off; }
+    }
+    if (lo === null) continue;
+    const firstGlobal = runOf.indexOf(ridx);
+    const localLo = lo - firstGlobal, localHi = hi - firstGlobal + 1;
+    const sub = r.text.substring(localLo, localHi);
+    if (sub) out.push({type: 'text', text: sub, bold: r.bold, italic: r.italic});
+  }
+  return out;
+}
+
+function extractQuestions(runs) {
+  const {text, runOf} = runsToIndexedText(runs);
+  let cutIdx = text.length;
+  for (const marker of ["Examiner's Report", "Examiner\u2019s Report", "Mark Scheme"]) {
+    const idx = text.indexOf(marker);
+    if (idx !== -1) cutIdx = Math.min(cutIdx, idx);
+  }
+  const qRe = /\n\s*Q(\d+)\.\s*\n/g;
+  const matches = [...text.substring(0, cutIdx).matchAll(qRe)];
+  const questions = [];
+  matches.forEach((m, k) => {
+    const qnum = m[1];
+    const start = m.index + m[0].length;
+    const end = (k + 1 < matches.length) ? matches[k+1].index : cutIdx;
+    const subRuns = sliceRuns(runs, runOf, start, end);
+    questions.push({num: qnum, runs: subRuns});
+  });
+  return questions;
+}
+
+function cleanQuestionRuns(subRuns) {
+  const {text, runOf} = runsToIndexedText(subRuns);
+  const m = text.match(/\(Total for [Qq]uestion\s*(?:is)?\s*=?\s*(\d+)\s*marks?\)/);
+  const totalMarks = m ? m[1] : null;
+  const end = m ? text.indexOf(m[0]) : text.length;
+  return {runs: sliceRuns(subRuns, runOf, 0, end), totalMarks};
+}
+
+function splitParts(subRuns) {
+  const {text, runOf} = runsToIndexedText(subRuns);
+  const partRe = /\n\(([a-h])\)\s*/g;
+  const matches = [...text.matchAll(partRe)];
+  if (!matches.length) return {intro: subRuns, parts: []};
+  const intro = sliceRuns(subRuns, runOf, 0, matches[0].index);
+  const parts = [];
+  matches.forEach((m, idx) => {
+    const start = m.index + m[0].length;
+    const end = (idx + 1 < matches.length) ? matches[idx+1].index : text.length;
+    const partText = text.substring(start, end);
+    // The mark value usually sits alone on its own line, e.g.
+    // "...\n\n(2)\n\n...". Look for it anywhere in this part's span, not
+    // just right at the end - sometimes unlabelled connective text (not
+    // its own lettered part) follows it in the original paper, which used
+    // to leave the "(2)" sitting in the body as literal, confusing text.
+    const markMatch = partText.match(/\n\s*\((\d+)\)\s*(?=\n|$)/);
+    let prun;
+    if (markMatch) {
+      const markStart = start + markMatch.index;
+      const markEnd = markStart + markMatch[0].length;
+      prun = sliceRuns(subRuns, runOf, start, markStart).concat(sliceRuns(subRuns, runOf, markEnd, end));
+      parts.push({label: m[1], marks: markMatch[1], runs: prun});
+    } else {
+      prun = sliceRuns(subRuns, runOf, start, end);
+      parts.push({label: m[1], marks: null, runs: prun});
+    }
+  });
+  return {intro, parts};
+}
+
+function stripDottedLines(runs) {
+  return runs.map(r => {
+    if (r.type !== 'text') return r;
+    // A run of dots is an answer-line placeholder from the original paper.
+    // It's sometimes followed directly by a unit hint (°, cm, %, kg...) -
+    // that hint is genuinely useful (tells the student what to answer in)
+    // so turn it into a clear bracketed note instead of leaving a stray,
+    // context-free symbol sitting alone on its own line.
+    let t = r.text.replace(/\.{4,}\s*([^\s.\n]{0,10})?/g, (m, unit) => {
+      unit = (unit || '').trim();
+      return unit ? ` [answer in ${unit}]` : '';
+    });
+    t = t.replace(/[ \t]+\n/g, '\n');
+    t = t.replace(/\n{3,}/g, '\n\n');
+    return {...r, text: t};
+  }).filter(r => r.type === 'img' || r.text.replace(/[\s\u00a0\u0000]/g, '').length > 0);
+}
+
+function buildQuestions(runs) {
+  const raw = extractQuestions(runs);
+  return raw.map(({num, runs: subRuns}) => {
+    const {runs: cleaned0, totalMarks} = cleanQuestionRuns(subRuns);
+    const cleaned = stripDottedLines(cleaned0);
+    let {intro, parts} = splitParts(cleaned);
+    intro = stripDottedLines(intro);
+    parts = parts.map(p => ({label: p.label, marks: p.marks, runs: stripDottedLines(p.runs)}));
+    return {num, marks: totalMarks, intro: {runs: intro}, parts, source: 'rtf'};
+  });
+}
+
+/* =========================================================================
+   2b. EXAMBUILDER (OCR) MHTML PARSER
+   ========================================================================= */
+/* =============================================================================
+   EXAMBUILDER (OCR) MHTML PARSER
+   These files are MIME multipart/related documents: a text/html part with
+   genuine structured text (bold labels, italics, superscripts, ordered
+   lists, [N]-mark tags) plus separate image/png parts for diagrams AND for
+   small inline maths fragments (stacked fractions etc - these have no
+   underlying LaTeX/MathML anywhere in the file, they are screenshots).
+   ============================================================================= */
+
+function parseMimeMultipart(raw) {
+  const boundaryMatch = raw.match(/boundary="([^"]+)"/);
+  if (!boundaryMatch) return null;
+  const boundary = '--' + boundaryMatch[1];
+  const rawParts = raw.split(boundary).slice(1, -1); // drop preamble + trailing "--"
+  const parts = [];
+  for (const chunk of rawParts) {
+    const headerEnd = chunk.indexOf('\n\n');
+    const headerEndCRLF = chunk.indexOf('\r\n\r\n');
+    let hEnd = headerEnd, sepLen = 2;
+    if (headerEndCRLF !== -1 && (headerEnd === -1 || headerEndCRLF < headerEnd)) {
+      hEnd = headerEndCRLF; sepLen = 4;
+    }
+    if (hEnd === -1) continue;
+    const headerBlock = chunk.substring(0, hEnd);
+    const body = chunk.substring(hEnd + sepLen);
+    const headers = {};
+    headerBlock.split(/\r?\n/).forEach(line => {
+      const m = line.match(/^([\w-]+):\s*(.*)$/);
+      if (m) headers[m[1].toLowerCase()] = m[2].trim();
+    });
+    parts.push({headers, body: body.replace(/^\r?\n+|\r?\n+$/g, '')});
+  }
+  return parts;
+}
+
+function decodeBase64ToString(b64) {
+  const clean = b64.replace(/[\r\n\s]+/g, '');
+  try {
+    const bin = atob(clean);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (e) {
+    return '';
+  }
+}
+
+function basekey(path) {
+  let clean = path.replace(/["']+$/g, '');           // strip stray trailing quote chars from malformed HTML attrs
+  clean = clean.replace(/\\/g, '/');
+  const segs = clean.split('/').filter(Boolean);
+  // Different source papers reuse identical "pgNN_Q_01" crop filenames, so
+  // the filename alone isn't a safe key - keep the parent folder (the
+  // paper's own code, e.g. H235H245-FMathsA-Y543-01-Jun22) too.
+  const filename = (segs.pop() || '').replace(/\.(png|svg|jpg|jpeg)$/i, '').replace(/_150$/, '');
+  let parent = segs.pop() || '';
+  if (parent.toLowerCase() === 'img') parent = segs.pop() || ''; // skip the generic "img" folder, use the paper-code folder above it
+  return parent + '/' + filename;
+}
+
+function parseExamBuilder(raw) {
+  const parts = parseMimeMultipart(raw);
+  if (!parts) return null;
+
+  const imageMap = new Map(); // basekey -> data URL
+  let htmlPart = null;
+  let bestHtmlLen = -1;
+
+  for (const p of parts) {
+    const ct = (p.headers['content-type'] || '').toLowerCase();
+    const loc = p.headers['content-location'] || '';
+    const cte = (p.headers['content-transfer-encoding'] || '').toLowerCase();
+    if (ct.startsWith('image/')) {
+      const key = basekey(loc);
+      const mime = ct.split(';')[0].trim();
+      const b64 = p.body.replace(/[\r\n\s]+/g, '');
+      imageMap.set(key, `data:${mime};base64,${b64}`);
+    } else if (ct.startsWith('text/html')) {
+      if (/headerfooter/i.test(loc)) continue; // skip page header/footer template
+      const decoded = cte === 'base64' ? decodeBase64ToString(p.body) : p.body;
+      if (decoded.length > bestHtmlLen) { bestHtmlLen = decoded.length; htmlPart = decoded; }
+    }
+  }
+  if (!htmlPart) return null;
+
+  const doc = new DOMParser().parseFromString(htmlPart, 'text/html');
+  const section = doc.querySelector('.Section1') || doc.body;
+
+  // Swap every <img> src for its matching embedded data URL where we have one
+  section.querySelectorAll('img').forEach(img => {
+    const candidates = [img.getAttribute('src'), img.getAttribute('data-mce-src'), img.getAttribute('data-fallback')]
+      .filter(Boolean);
+    for (const c of candidates) {
+      const key = basekey(c);
+      if (imageMap.has(key)) { img.setAttribute('src', imageMap.get(key)); break; }
+    }
+    img.removeAttribute('data-mce-src');
+    img.removeAttribute('data-fallback');
+    img.removeAttribute('data-mce-style');
+  });
+
+  // ExamBuilder's crops are exported at a fixed 150dpi and (unlike the RTF
+  // source) their <img width/height> attributes reflect the original
+  // page's real print size - convert those to physical mm so they render
+  // at true scale regardless of the browser's assumed screen DPI, instead
+  // of guessing a page-fraction bucket like the RTF path has to.
+  let eqImgCounter = 0;
+  section.querySelectorAll('img').forEach(img => {
+    const w = parseFloat(img.getAttribute('width'));
+    const h = parseFloat(img.getAttribute('height'));
+    if (w && h) {
+      const wmm = (w / 150 * 25.4).toFixed(1);
+      const hmm = (h / 150 * 25.4).toFixed(1);
+      img.setAttribute('style', `width:${wmm}mm;height:${hmm}mm;vertical-align:middle;`);
+      img.setAttribute('data-base-w', wmm);
+      img.setAttribute('data-base-h', hmm);
+      // Small crops (roughly under 2cm) are almost always inline maths
+      // fragments (fractions, single symbols) rather than full diagrams -
+      // flag them as OCR candidates and give them a stable id so a later
+      // pass can swap the picture for a transcribed/rendered equation.
+      if (wmm <= 20 && hmm <= 14) {
+        img.setAttribute('data-eq-candidate', '1');
+        img.setAttribute('id', 'eqimg-' + (++eqImgCounter));
+      }
+    }
+    img.removeAttribute('width');
+    img.removeAttribute('height');
+  });
+
+  const questions = [];
+  let current = null;
+
+  const topDivs = Array.from(section.children).filter(el => el.tagName === 'DIV');
+  for (const qdiv of topDivs) {
+    if (/END OF QUESTION/i.test(qdiv.textContent)) break;
+    const labelSpans = Array.from(qdiv.querySelectorAll('span')).filter(s => {
+      const style = s.getAttribute('style') || '';
+      return style.includes('font-weight:bold') && style.includes('display:table-cell');
+    });
+    if (!labelSpans.length) continue; // spacer / title div, not a question
+
+    for (const labelSpan of labelSpans) {
+      const rawLabel = labelSpan.textContent.trim(); // e.g. "1(a)." or "(b)."
+      const numMatch = rawLabel.match(/^(\d+)/);
+      const letterMatch = rawLabel.match(/\(([a-h])\)/i);
+      if (numMatch) {
+        if (current) questions.push(current);
+        current = {num: numMatch[1], marks: null, parts: []};
+      }
+      if (!current) current = {num: '?', marks: null, parts: []};
+
+      // content span = next sibling span with the question/part body
+      let contentSpan = labelSpan.nextElementSibling;
+      while (contentSpan && contentSpan.tagName !== 'SPAN') contentSpan = contentSpan.nextElementSibling;
+      if (!contentSpan) continue;
+
+      // pull out the right-aligned [N] marks tag(s). A simple part has one;
+      // a part with roman-numeral sub-items (i, ii, iii) has several, each
+      // already correctly positioned next to its own sub-item - leave those
+      // in place and don't claim a single "marks" value for the parent
+      // letter, but still count them all towards the question's total.
+      let marks = null;
+      const markDivs = Array.from(contentSpan.querySelectorAll('div'))
+        .filter(d => /^\[\d+\]$/.test(d.textContent.trim()));
+      let partMarksSum = 0;
+      markDivs.forEach(d => {
+        const mm = d.textContent.trim().match(/\[(\d+)\]/);
+        if (mm) partMarksSum += parseInt(mm[1], 10);
+      });
+      if (markDivs.length === 1) {
+        marks = partMarksSum.toString();
+        markDivs[0].remove();
+      }
+
+      // strip trailing filler <br> runs (answer-space placeholders) - we
+      // generate our own spacing per layout mode instead
+      while (contentSpan.lastElementChild &&
+             ['BR'].includes(contentSpan.lastElementChild.tagName)) {
+        contentSpan.removeChild(contentSpan.lastElementChild);
+      }
+      // collapse long straight-<br> runs anywhere in the middle too
+      let html = contentSpan.innerHTML.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+      html = html.replace(/<p>\s*(&nbsp;|\u00a0)?\s*<\/p>\s*$/i, '').trim();
+
+      current.parts.push({label: letterMatch ? letterMatch[1] : null, marks, html, _sumMarks: partMarksSum});
+    }
+  }
+  if (current) questions.push(current);
+
+  // roll up a total-marks figure per question from its parts
+  questions.forEach(q => {
+    const sum = q.parts.reduce((acc, p) => acc + (p._sumMarks || 0), 0);
+    q.marks = sum || null;
+    q.parts.forEach(p => delete p._sumMarks);
+  });
+
+  return questions;
+}
+
+
+/* =========================================================================
+   3. IMAGE SIZE HEURISTIC (RTF path only)
+   Bucket every extracted image by native pixel width relative to the other
+   images in THIS document (not an absolute threshold - exam board exports
+   vary a lot paper to paper). ExamBuilder images carry their own physical
+   mm sizing already (set in exambuilder-parser.js) so they skip this.
+   ========================================================================= */
+const SIZE_BUCKET_PCT = {tiny: 14, small: 24, medium: 40, large: 62};
+
+function collectImgRuns(questions) {
+  return questions.flatMap(q => [q.intro, ...q.parts])
+                  .filter(f => f.runs)
+                  .flatMap(f => f.runs)
+                  .filter(r => r.type === 'img');
+}
+
+async function computeImageSizes(questions) {
+  const imgRuns = collectImgRuns(questions);
+  const widths = await Promise.all(imgRuns.map(r => new Promise(res => {
+    const im = new Image();
+    im.onload = () => res(im.naturalWidth || 300);
+    im.onerror = () => res(300);
+    im.src = r.url;
+  })));
+  const sorted = [...widths].sort((a,b) => a-b);
+  const n = sorted.length;
+  const sizeMap = new Map();
+  imgRuns.forEach((r, idx) => {
+    const w = widths[idx];
+    const rank = n > 1 ? sorted.indexOf(w) / (n - 1) : 0.5;
+    let bucket = rank < 0.33 ? 'small' : rank < 0.70 ? 'medium' : 'large';
+    sizeMap.set(r.url, bucket);
+  });
+  return sizeMap;
+}
+
+/* =========================================================================
+   4. RENDERING
+   A "fragment" is either {runs:[...]} (RTF path) or {html:"..."} (already-
+   sanitised ExamBuilder HTML, images pre-sized in mm). Both question shapes
+   converge here so the rest of the app doesn't need to know which parser
+   produced them.
+   ========================================================================= */
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/°/g,'&deg;').replace(/\u2264/g,'&le;').replace(/\u2265/g,'&ge;')
+          .replace(/[\u00a0\u0000]/g,' ');
+}
+
+function runsToHTML(runs, sizeMap) {
+  let out = '';
+  for (const r of runs) {
+    if (r.type === 'img') {
+      const bucket = sizeMap.get(r.url) || 'medium';
+      const pct = SIZE_BUCKET_PCT[bucket];
+      out += `<img class="diagram" data-url="${r.url}" src="${r.url}" style="width:${pct}%">`;
+      continue;
+    }
+    let t = esc(r.text);
+    t = t.split(/\n\s*\n+/).join('</p><p>');
+    t = t.replace(/\n/g, ' ');
+    if (r.bold) t = `<strong>${t}</strong>`;
+    if (r.italic) t = `<em>${t}</em>`;
+    out += t;
+  }
+  out = out.replace(/\[answer in ([^\]]+)\]/gi, '<span class="answer-hint">[Answer in $1]</span>');
+  return `<p>${out}</p>`.replace(/<p><\/p>/g, '');
+}
+
+function fragmentToHTML(fragment, sizeMap, mode) {
+  if (!fragment) return '';
+  if (fragment.html !== undefined) {
+    // ExamBuilder keeps modest internal <br><br> gaps (originally answer
+    // space) for exam mode's readability; compressed mode wants those
+    // squashed down further since the point is density, not writing room.
+    if (mode === 'compressed') return fragment.html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br>');
+    return fragment.html;
+  }
+  return runsToHTML(fragment.runs, sizeMap);              // RTF: build from runs + bucketed sizes
+}
+
+function renderPaper(questions, sizeMap, mode, title, opts) {
+  opts = opts || {};
+  const parts = opts.skipTitle ? [] : [`<h1 class="papertitle">${esc(title)}</h1>`];
+  for (const q of questions) {
+    parts.push(`<div class="question">`);
+    parts.push(`<div class="qtitle"><span class="qhead">Q${q.num}.</span></div>`);
+    parts.push(`<div class="qbody">`);
+    parts.push(fragmentToHTML(q.intro, sizeMap, mode));
+    if (q.parts.length) {
+      for (const p of q.parts) {
+        const mk = p.marks ? ` <span class="marks">[${p.marks} mark${p.marks!=='1'?'s':''}]</span>` : '';
+        const label = p.label ? `<strong>(${p.label})</strong> ` : '';
+        let block = `<div class="part">${label}${fragmentToHTML(p, sizeMap, mode)}${mk}</div>`;
+        if (mode === 'exam') {
+          const m = parseInt(p.marks || '2', 10);
+          const h = Math.min(Math.max(m * 15, 20), 90);
+          block += `<div class="answer-space" style="height:${h}mm"></div>`;
+          // Wrapped together with break-inside:avoid so a page break can
+          // never land between a subpart's text and its own writing space.
+          block = `<div class="part-block">${block}</div>`;
+        }
+        parts.push(block);
+      }
+    } else if (mode === 'exam') {
+      const m = parseInt(q.marks || '3', 10);
+      const h = Math.min(Math.max(m * 15, 25), 120);
+      parts.push(`<div class="answer-space" style="height:${h}mm"></div>`);
+    }
+    // Total marks go at the END, matching the original paper's "(Total for
+    // question = N marks)" convention - putting it up in the header reads
+    // as if it belonged to the first sub-part, which clashes with that
+    // part's own [N marks] tag right next to it. The clearfix rules above
+    // stop this from getting visually dragged up next to a floated tag.
+    if (q.marks) {
+      parts.push(`<div class="qtotal">[Total: ${q.marks} mark${q.marks!=='1'?'s':''}]</div>`);
+    }
+    parts.push(`</div></div>`);
+  }
+  return parts.join('\n');
+}
+
+/* =========================================================================
+   4c. COVER PAGE + TOTALS
+   ========================================================================= */
+function computeTotalMarks(questions) {
+  return questions.reduce((sum, q) => {
+    if (q.marks) return sum + parseInt(q.marks, 10);
+    return sum + q.parts.reduce((s, p) => s + (p.marks ? parseInt(p.marks, 10) : 0), 0);
+  }, 0);
+}
+
+function coverPageHTML(title, totalMarks) {
+  return `<div class="coverpage">
+  <div class="cp-testname" contenteditable="true">${esc(title)}</div>
+  <div class="cp-row"><span>Name:</span><span class="cp-line"></span></div>
+  <div class="cp-row"><span>Class:</span><span class="cp-line"></span></div>
+  <div class="cp-meta">
+    <span>Total marks: <strong>${totalMarks || '____'}</strong></span>
+    <span>Total pages: <strong class="cp-pages">&ndash;</strong></span>
+  </div>
+</div>`;
+}
+
+/* =========================================================================
+   4d. ON-SCREEN PAGE BREAK PREVIEW
+   Simulates where the printed/PDF output will actually paginate, instead of
+   leaving the editor as one continuous scroll. The cover page (if present)
+   and, in "exam" layout, every question always start a fresh page - that
+   mirrors the print CSS's page-break-after:always rules exactly. In
+   "compressed" layout, questions flow freely until they stop fitting the
+   remaining space on an A4 page (measured against a hidden mm-sized probe
+   element, so it tracks the real print page height rather than a guessed
+   pixel value).
+   ========================================================================= */
+function computeAndShowPageBreaks(mode) {
+  paperEl.querySelectorAll('.page-break-line').forEach(el => el.remove());
+  const blocks = Array.from(paperEl.children).filter(el =>
+    el.classList.contains('question') || el.classList.contains('coverpage'));
+  if (!blocks.length) return 0;
+
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:281mm;width:1px;';
+  document.body.appendChild(probe);
+  const pagePx = probe.offsetHeight || 1000;
+  probe.remove();
+
+  const paperTop = paperEl.getBoundingClientRect().top + window.scrollY;
+  let pageStart = 0;
+  let breaks = 0;
+
+  blocks.forEach((b, i) => {
+    const rect = b.getBoundingClientRect();
+    const top = rect.top + window.scrollY - paperTop;
+    const bottom = top + rect.height;
+    const afterCover = i > 0 && blocks[i - 1].classList.contains('coverpage');
+    const forced = i > 0 && (mode === 'exam' || afterCover);
+    const overflow = !forced && i > 0 && (bottom - pageStart) > pagePx;
+
+    if (forced || overflow) {
+      breaks++;
+      const line = document.createElement('div');
+      line.className = 'page-break-line';
+      line.innerHTML = `<span>~ page break (approx.) ~</span>`;
+      b.parentNode.insertBefore(line, b);
+      pageStart = top;
+    }
+  });
+
+  return breaks + 1;
+}
+
+/* =========================================================================
+   4e. LATEX EXPORT
+   Best-effort structural export - text, bold/italic, part labels, marks and
+   the [answer in ...] hints translate directly. Diagrams only ever exist as
+   bitmap crops here (there's no vector/LaTeX source to recover), so they're
+   left as a clearly-flagged placeholder rather than silently dropped or
+   guessed at.
+   ========================================================================= */
+function escLatex(s) {
+  return String(s)
+    .replace(/\\/g, '\\textbackslash{}')
+    .replace(/([%$&#_{}])/g, '\\$1')
+    .replace(/~/g, '\\textasciitilde{}')
+    .replace(/\^/g, '\\textasciicircum{}');
+}
+
+function domToLatex(node) {
+  let out = '';
+  node.childNodes.forEach(c => {
+    if (c.nodeType === 3) { out += escLatex(c.textContent); return; }
+    if (c.nodeType !== 1) return;
+    const tag = c.tagName.toLowerCase();
+    if (tag === 'img') { out += ' \\par\\textit{[diagram omitted -- see original paper]}\\par '; return; }
+    if (tag === 'br') { out += '\\\\\n'; return; }
+    const inner = domToLatex(c);
+    if (tag === 'strong' || tag === 'b') out += `\\textbf{${inner}}`;
+    else if (tag === 'em' || tag === 'i') out += `\\textit{${inner}}`;
+    else if (tag === 'span' && c.classList.contains('answer-hint')) out += ` \\hfill\\textit{${inner}}`;
+    else if (tag === 'p' || tag === 'div') out += inner + '\\par\n';
+    else out += inner;
+  });
+  return out;
+}
+
+function runsToLatex(runs) {
+  return runs.map(r => {
+    if (r.type === 'img') return '\\par\\textit{[diagram omitted -- see original paper]}\\par';
+    let t = escLatex(r.text.replace(/\[answer in ([^\]]+)\]/gi, '\\hfill\\textit{[Answer in $1]}'));
+    if (r.bold) t = `\\textbf{${t}}`;
+    if (r.italic) t = `\\textit{${t}}`;
+    return t.replace(/\n+/g, ' \\\\ ');
+  }).join(' ');
+}
+
+function fragmentToLatex(fragment) {
+  if (!fragment) return '';
+  if (fragment.html !== undefined) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = fragment.html;
+    return domToLatex(tmp);
+  }
+  return runsToLatex(fragment.runs);
+}
+
+function buildLatexDocument(questions, title) {
+  const lines = [
+    '\\documentclass[11pt]{article}',
+    '\\usepackage[a4paper,margin=16mm]{geometry}',
+    '\\usepackage{amsmath,amssymb}',
+    '\\usepackage{enumitem}',
+    '\\usepackage{parskip}',
+    '\\setlength{\\parindent}{0pt}',
+    '\\begin{document}',
+    `\\begin{center}\\Large\\textbf{${escLatex(title)}}\\end{center}`,
+    '\\vspace{6mm}',
+    ''
+  ];
+  questions.forEach(q => {
+    lines.push(`\\par\\textbf{Q${escLatex(String(q.num))}.}\\quad ${fragmentToLatex(q.intro)}`);
+    if (q.parts.length) {
+      lines.push('\\begin{enumerate}[label=(\\alph*)]');
+      q.parts.forEach(p => {
+        const mk = p.marks ? ` \\hfill\\textit{[${p.marks} mark${p.marks !== '1' ? 's' : ''}]}` : '';
+        lines.push(`\\item ${fragmentToLatex(p)}${mk}`);
+      });
+      lines.push('\\end{enumerate}');
+    }
+    if (q.marks) {
+      lines.push(`\\par\\hfill\\textit{[Total: ${q.marks} mark${q.marks !== '1' ? 's' : ''}]}`);
+    }
+    lines.push('\\vspace{5mm}');
+    lines.push('');
+  });
+  lines.push('\\end{document}');
+  return lines.join('\n');
+}
+
+/* =========================================================================
+   4b. FORMAT DETECTION
+   ExamWizard (Edexcel) exports plain RTF ("{\rtf1..."). ExamBuilder (OCR)
+   exports a MIME multipart/related document. Sniff the first bytes rather
+   than trusting the file extension - both arrive as ".doc".
+   ========================================================================= */
+function detectFormat(text) {
+  const head = text.slice(0, 4000);
+  if (/^\s*\{\\rtf/i.test(text)) return 'rtf';
+  if (/^\s*MIME-Version:/i.test(text) || /Content-Type:\s*multipart\/related/i.test(head)) return 'exambuilder';
+  return 'unknown';
+}
+
+function normaliseExamBuilder(questions) {
+  // give ExamBuilder questions the same {intro, parts} shape as the RTF
+  // path expects, just with html fragments instead of run arrays
+  return questions.map(q => ({
+    num: q.num,
+    marks: q.marks,
+    intro: null,
+    parts: q.parts.map(p => ({label: p.label, marks: p.marks, html: p.html})),
+    source: 'exambuilder',
+  }));
+}
+
+/* =========================================================================
+   5. UI WIRING
+   ========================================================================= */
+let currentQuestions = null;
+let currentSizeMap = null;
+let currentImgScale = new Map(); // ExamBuilder only: img src -> scale percentage
+let currentImgAlign = new Map(); // any image: key (url/src) -> 'none' | 'left' | 'right'
+let currentFormat = null;
+let reviewImgKeys = []; // populated when the sizing panel opens for ExamBuilder: select-index -> img src
+const ocrResults = new Map(); // img id -> LaTeX string, survives re-renders
+
+// ---- Gemini proxy config -------------------------------------------------
+// Point this at the same Apps Script Web App URL your other tools (seating
+// plan generator, PDF stripper) already use to call Gemini. The fetch body
+// below is a guess at a common shape - if your proxy expects something
+// different, this is the only function that needs changing.
+const GEMINI_PROXY_URL = ''; // <-- paste your Apps Script Web App URL here
+
+async function transcribeImageToLatex(dataUrl) {
+  if (!GEMINI_PROXY_URL) throw new Error('No GEMINI_PROXY_URL configured');
+  const [, mimeType, base64] = dataUrl.match(/^data:([^;]+);base64,(.+)$/) || [];
+  if (!base64) throw new Error('Not a base64 data URL');
+  const resp = await fetch(GEMINI_PROXY_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      image: base64,
+      mimeType: mimeType,
+      prompt: 'This image is a small cropped fragment of a maths exam paper, ' +
+              'showing a single mathematical expression (e.g. a fraction or ' +
+              'symbol). Transcribe it as LaTeX only - no prose, no code ' +
+              'fences, no dollar signs, just the raw LaTeX for the ' +
+              'expression itself, e.g. \\frac{Stress}{Strain}',
+    }),
+  });
+  if (!resp.ok) throw new Error('Proxy returned ' + resp.status);
+  const data = await resp.json();
+  const latex = (data.text || data.latex || data.result || '').trim();
+  if (!latex) throw new Error('Empty response from proxy');
+  return latex.replace(/^```[a-z]*\n?/i, '').replace(/```$/, '').trim();
+}
+
+function applyOcrResults() {
+  paperEl.querySelectorAll('img[data-eq-candidate]').forEach(img => {
+    const latex = ocrResults.get(img.id);
+    if (!latex || typeof katex === 'undefined') return;
+    try {
+      const span = document.createElement('span');
+      span.className = 'eq-rendered';
+      span.id = img.id;
+      span.setAttribute('data-eq-candidate', '1');
+      katex.render(latex, span, {throwOnError: false});
+      img.replaceWith(span);
+    } catch (e) {
+      img.classList.add('eq-failed');
+      img.title = 'OCR/render failed: ' + e.message;
+    }
+  });
+}
+
+// Rescales ExamBuilder diagrams per currentImgScale (keyed by image src),
+// since those crops embed their real print-size mm dimensions directly in
+// the source HTML with no scale factor - unlike the RTF path, where the
+// size bucket is baked in fresh on every rerender() call instead.
+function applyImageScale() {
+  if (!currentImgScale || !currentImgScale.size) return;
+  paperEl.querySelectorAll('img[data-base-w]').forEach(img => {
+    const scale = currentImgScale.get(img.src);
+    if (!scale) return;
+    const baseW = parseFloat(img.dataset.baseW);
+    const baseH = parseFloat(img.dataset.baseH);
+    if (!baseW || !baseH) return;
+    img.style.width = (baseW * scale / 100).toFixed(1) + 'mm';
+    img.style.height = (baseH * scale / 100).toFixed(1) + 'mm';
+  });
+}
+
+// Text-wrap around images: keyed the same way as size/scale (RTF images by
+// their data-url, ExamBuilder images by their data-URL src), so it works
+// for both parsers. A per-image entry in currentImgAlign (set via the
+// "Review diagram sizes" panel) always wins; otherwise every image falls
+// back to defaultImgAlign (set via the toolbar's "Default wrap" control),
+// so a single choice there applies to the whole paper without having to
+// open the panel and set each image individually. Purely a class toggle on
+// the already-rendered <img> - unlike a size/scale change, this never needs
+// a full rerender and so never touches (or discards) any in-progress edits.
+function applyImageAlign() {
+  paperEl.querySelectorAll('img').forEach(img => {
+    const key = img.dataset.url || img.src;
+    const align = currentImgAlign.has(key) ? currentImgAlign.get(key) : defaultImgAlign;
+    img.classList.remove('diagram-wrap-left', 'diagram-wrap-right');
+    if (align === 'left') img.classList.add('diagram-wrap-left');
+    else if (align === 'right') img.classList.add('diagram-wrap-right');
+  });
+}
+
+// Collapses an element's own paragraph breaks and <br>s into a single flowing
+// line of text - used per-section (a question's intro, or one part) rather
+// than globally, so a question's intro and its lettered parts each flatten
+// independently instead of merging into each other.
+function flattenElementInPlace(el) {
+  el.querySelectorAll('br').forEach(br => br.replaceWith(document.createTextNode(' ')));
+  const paras = Array.from(el.children).filter(c => c.tagName === 'P');
+  if (paras.length > 1) {
+    const merged = document.createElement('p');
+    paras.forEach((p, i) => {
+      if (i > 0) merged.appendChild(document.createTextNode(' '));
+      while (p.firstChild) merged.appendChild(p.firstChild);
+    });
+    paras[0].replaceWith(merged);
+    paras.slice(1).forEach(p => p.remove());
+  }
+}
+
+// Applied per-section: each .part is flattened on its own first, then each
+// .qbody - by that point any <br>s nested inside its child .part divs are
+// already gone, so the qbody pass only ever touches the intro's own direct
+// <p> children (the .part/.part-block/.answer-space/.qtotal siblings aren't
+// <p> tags, so they're untouched and stay structurally separate).
+function flattenLineBreaks() {
+  paperEl.querySelectorAll('.part').forEach(flattenElementInPlace);
+  paperEl.querySelectorAll('.qbody').forEach(flattenElementInPlace);
+}
+
+const fileInput = document.getElementById('fileInput');
+const modeSelect = document.getElementById('modeSelect');
+const reviewBtn = document.getElementById('reviewBtn');
+const ocrBtn = document.getElementById('ocrBtn');
+const printBtn = document.getElementById('printBtn');
+const pdfBtn = document.getElementById('pdfBtn');
+const texBtn = document.getElementById('texBtn');
+const coverToggle = document.getElementById('coverToggle');
+const flattenToggle = document.getElementById('flattenToggle');
+const defaultWrapSelect = document.getElementById('defaultWrapSelect');
+let defaultImgAlign = 'none'; // fallback wrap direction for any image without its own per-image override
+const statusEl = document.getElementById('status');
+const paperEl = document.getElementById('paper');
+const editHintEl = document.getElementById('edit-hint');
+const sizingPanel = document.getElementById('sizing-panel');
+const sizeRowsEl = document.getElementById('sizeRows');
+const closeSizing = document.getElementById('closeSizing');
+
+let paperEdited = false;
+let lastModeValue = modeSelect.value;
+
+function confirmDiscardEdits(actionLabel) {
+  if (!paperEdited) return true;
+  const ok = confirm(`You've made edits directly in the paper. ${actionLabel} will discard them - continue?`);
+  return ok;
+}
+
+paperEl.addEventListener('input', () => {
+  paperEdited = true;
+  statusEl.textContent = 'Editing… (your changes here are local to this browser tab only)';
+});
+
+// Manual equation entry - works without any OCR proxy configured. Click any
+// flagged equation crop (or an already-transcribed one, to fix it) and type
+// or paste its LaTeX directly.
+paperEl.addEventListener('click', (e) => {
+  const target = e.target.closest('[data-eq-candidate]');
+  if (!target || !target.id) return;
+  e.preventDefault();
+  const current = ocrResults.get(target.id) || '';
+  const input = window.prompt(
+    'LaTeX for this equation (leave blank to show the original image).\n\n' +
+    'Not sure how to write it? Compose it at https://latexeditor.lagrida.com/ ' +
+    'and paste the code here.',
+    current
+  );
+  if (input === null) return; // cancelled
+  const latex = input.trim();
+
+  if (!latex) {
+    if (!ocrResults.has(target.id)) return; // already showing the image, nothing to do
+    if (target.tagName !== 'IMG') {
+      // Reverting a rendered equation back to its image needs a full
+      // rerender, since the original <img> no longer exists in the DOM.
+      if (!confirmDiscardEdits('Reverting this equation to its original image')) return;
+      ocrResults.delete(target.id);
+      rerender();
+      return;
+    }
+    ocrResults.delete(target.id);
+    return;
+  }
+
+  ocrResults.set(target.id, latex);
+  if (target.tagName === 'IMG') {
+    applyOcrResults();
+  } else if (typeof katex !== 'undefined') {
+    try {
+      target.innerHTML = '';
+      katex.render(latex, target, {throwOnError: false});
+      target.classList.remove('eq-failed');
+    } catch (err) {
+      target.classList.add('eq-failed');
+      target.title = 'Render failed: ' + err.message;
+    }
+  }
+  paperEdited = true;
+});
+
+function rerender() {
+  if (!currentQuestions) return;
+  const mode = modeSelect.value;
+  paperEl.className = mode;
+  const title = (fileInput.files[0]?.name || 'Worksheet').replace(/\.(doc|rtf)$/i, '').replace(/[_-]+/g, ' ');
+  const showCover = coverToggle.checked;
+  let html = showCover ? coverPageHTML(title, computeTotalMarks(currentQuestions)) : '';
+  html += renderPaper(currentQuestions, currentSizeMap, mode, title, {skipTitle: showCover});
+  paperEl.innerHTML = html;
+  paperEl.style.display = 'block';
+  paperEl.setAttribute('contenteditable', 'true');
+  paperEl.setAttribute('spellcheck', 'false');
+  editHintEl.style.display = 'block';
+  paperEdited = false;
+  applyImageScale();
+  applyImageAlign();
+  applyOcrResults();
+  if (flattenToggle.checked) flattenLineBreaks();
+  requestAnimationFrame(() => {
+    const pageCount = computeAndShowPageBreaks(mode);
+    const pagesEl = paperEl.querySelector('.cp-pages');
+    if (pagesEl) pagesEl.textContent = pageCount;
+  });
+}
+
+ocrBtn.addEventListener('click', async () => {
+  const candidates = [...paperEl.querySelectorAll('img[data-eq-candidate]')];
+  if (!candidates.length) { statusEl.textContent = 'No equation-sized images found to transcribe.'; return; }
+  if (!GEMINI_PROXY_URL) {
+    statusEl.textContent = 'Set GEMINI_PROXY_URL near the top of the script to your Apps Script Web App URL first.';
+    return;
+  }
+  ocrBtn.disabled = true;
+  let done = 0, failed = 0;
+  for (const img of candidates) {
+    statusEl.textContent = `Transcribing equations… ${done + failed + 1}/${candidates.length}`;
+    try {
+      const latex = await transcribeImageToLatex(img.src);
+      ocrResults.set(img.id, latex);
+      done++;
+    } catch (e) {
+      failed++;
+      console.warn('OCR failed for', img.id, e);
+    }
+  }
+  applyOcrResults();
+  statusEl.textContent = `Transcribed ${done}/${candidates.length} equations` + (failed ? `, ${failed} failed (left as images).` : '.');
+  ocrBtn.disabled = false;
+});
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  if (!confirmDiscardEdits('Loading a new file')) { fileInput.value = ''; return; }
+  statusEl.textContent = 'Reading file…';
+  printBtn.disabled = true; reviewBtn.disabled = true;
+  pdfBtn.disabled = true; texBtn.disabled = true;
+  reviewBtn.style.display = ''; ocrBtn.style.display = 'none'; ocrResults.clear();
+  currentImgScale = new Map();
+  currentImgAlign = new Map();
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const data = e.target.result;
+    const format = detectFormat(data);
+    let questions;
+
+    if (format === 'rtf') {
+      statusEl.textContent = 'Parsing ExamWizard RTF…';
+      const runs = parseRTF(data);
+      questions = buildQuestions(runs);
+    } else if (format === 'exambuilder') {
+      statusEl.textContent = 'Parsing ExamBuilder export…';
+      const rawQs = parseExamBuilder(data);
+      questions = rawQs ? normaliseExamBuilder(rawQs) : [];
+      ocrBtn.style.display = '';
+    } else {
+      statusEl.textContent = 'Unrecognised file — expected an ExamWizard or ExamBuilder .doc export.';
+      return;
+    }
+
+    if (!questions.length) {
+      statusEl.textContent = `No questions found in this ${format} file — the export structure may have changed.`;
+      return;
+    }
+
+    statusEl.textContent = 'Sizing diagrams…';
+    const sizeMap = format === 'rtf' ? await computeImageSizes(questions) : new Map();
+    currentQuestions = questions;
+    currentSizeMap = sizeMap;
+    currentFormat = format;
+    rerender();
+    const imgCount = format === 'rtf' ? collectImgRuns(questions).length
+                                       : paperEl.querySelectorAll('img').length;
+    const eqCount = paperEl.querySelectorAll('img[data-eq-candidate]').length;
+    statusEl.textContent = `${questions.length} questions extracted` +
+      (imgCount ? `, ${imgCount} images` : '') +
+      (eqCount ? ` (${eqCount} look like equations - click one to type its LaTeX, or try "Transcribe equations" if you have a proxy set up).` : '.');
+    printBtn.disabled = false;
+    pdfBtn.disabled = false; texBtn.disabled = false;
+    const reviewableCount = format === 'rtf' ? currentSizeMap.size : paperEl.querySelectorAll('img[data-base-w]').length;
+    reviewBtn.disabled = (reviewableCount === 0);
+    ocrBtn.disabled = (eqCount === 0);
+  };
+  reader.readAsText(file, 'ISO-8859-1');
+});
+
+modeSelect.addEventListener('change', () => {
+  if (!confirmDiscardEdits('Switching layout')) {
+    modeSelect.value = lastModeValue;
+    return;
+  }
+  lastModeValue = modeSelect.value;
+  rerender();
+});
+printBtn.addEventListener('click', () => window.print());
+
+coverToggle.addEventListener('change', () => {
+  if (!confirmDiscardEdits('Toggling the cover page')) {
+    coverToggle.checked = !coverToggle.checked;
+    return;
+  }
+  rerender();
+});
+
+flattenToggle.addEventListener('change', () => {
+  if (!confirmDiscardEdits('Toggling one-line sections')) {
+    flattenToggle.checked = !flattenToggle.checked;
+    return;
+  }
+  rerender();
+});
+
+defaultWrapSelect.addEventListener('change', () => {
+  // No confirmDiscardEdits needed - like a per-image align change, this is
+  // just a class toggle via applyImageAlign(), never a full rerender.
+  defaultImgAlign = defaultWrapSelect.value;
+  applyImageAlign();
+});
+
+pdfBtn.addEventListener('click', () => {
+  if (!currentQuestions) return;
+  if (typeof html2pdf === 'undefined') {
+    statusEl.textContent = 'PDF library failed to load — check your internet connection and try again.';
+    return;
+  }
+  const filenameBase = (fileInput.files[0]?.name || 'exam-paper')
+    .replace(/\.(doc|rtf)$/i, '').replace(/[_-]+/g, '-').trim() || 'exam-paper';
+  statusEl.textContent = 'Generating PDF…';
+  pdfBtn.disabled = true;
+
+  // Generate from the live, visible paperEl rather than an off-screen
+  // clone - html2canvas (used internally by html2pdf) is known to be
+  // unreliable capturing elements positioned far outside the viewport in
+  // some browsers. Just hide the screen-only preview lines and disable
+  // editing for the duration, then restore both afterward either way.
+  const hiddenLines = Array.from(paperEl.querySelectorAll('.page-break-line'));
+  hiddenLines.forEach(el => { el.style.display = 'none'; });
+  const wasEditable = paperEl.getAttribute('contenteditable');
+  paperEl.removeAttribute('contenteditable');
+
+  const restore = () => {
+    hiddenLines.forEach(el => { el.style.display = ''; });
+    if (wasEditable !== null) paperEl.setAttribute('contenteditable', wasEditable);
+    pdfBtn.disabled = false;
+  };
+
+  const opt = {
+    margin: 8,
+    filename: filenameBase + '.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  };
+  html2pdf().set(opt).from(paperEl).save().then(() => {
+    statusEl.textContent = 'PDF downloaded.';
+    restore();
+  }).catch(err => {
+    statusEl.textContent = 'PDF generation failed: ' + (err && err.message ? err.message : err);
+    restore();
+  });
+});
+
+texBtn.addEventListener('click', () => {
+  if (!currentQuestions) return;
+  const title = (fileInput.files[0]?.name || 'Worksheet').replace(/\.(doc|rtf)$/i, '').replace(/[_-]+/g, ' ');
+  const tex = buildLatexDocument(currentQuestions, title);
+  const blob = new Blob([tex], {type: 'text/x-tex'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (title.trim().replace(/\s+/g, '-') || 'exam-paper') + '.tex';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  statusEl.textContent = 'LaTeX source downloaded — compile at overleaf.com or with pdflatex. Diagrams are noted as placeholders, not embedded.';
+});
+
+reviewBtn.addEventListener('click', () => {
+  sizeRowsEl.innerHTML = '';
+  if (currentFormat === 'exambuilder') {
+    reviewImgKeys = [];
+    const seen = new Set();
+    paperEl.querySelectorAll('img[data-base-w]').forEach(img => {
+      if (seen.has(img.src)) return;
+      seen.add(img.src);
+      const idx = reviewImgKeys.push(img.src) - 1;
+      const current = currentImgScale.get(img.src) || 100;
+      const align = currentImgAlign.has(img.src) ? currentImgAlign.get(img.src) : defaultImgAlign;
+      const row = document.createElement('div');
+      row.className = 'size-row';
+      row.innerHTML = `
+        <img src="${img.src}">
+        <div>
+          <div class="fname">image</div>
+          <select data-imgidx="${idx}">
+            ${[50, 75, 100, 125, 150, 200].map(p =>
+              `<option value="${p}" ${p === current ? 'selected' : ''}>${p}%</option>`).join('')}
+          </select>
+          <select data-align-imgidx="${idx}">
+            <option value="none"  ${align==='none' ?'selected':''}>No wrap</option>
+            <option value="left"  ${align==='left' ?'selected':''}>Wrap – image left</option>
+            <option value="right" ${align==='right'?'selected':''}>Wrap – image right</option>
+          </select>
+        </div>`;
+      sizeRowsEl.appendChild(row);
+    });
+  } else {
+    for (const [url, bucket] of currentSizeMap.entries()) {
+      const align = currentImgAlign.has(url) ? currentImgAlign.get(url) : defaultImgAlign;
+      const row = document.createElement('div');
+      row.className = 'size-row';
+      row.innerHTML = `
+        <img src="${url}">
+        <div>
+          <div class="fname">image</div>
+          <select data-url="${url}">
+            <option value="tiny"   ${bucket==='tiny'?'selected':''}>tiny (1/8 page)</option>
+            <option value="small"  ${bucket==='small'?'selected':''}>small (1/4 page)</option>
+            <option value="medium" ${bucket==='medium'?'selected':''}>medium (1/3 page)</option>
+            <option value="large"  ${bucket==='large'?'selected':''}>large (1/2 page)</option>
+          </select>
+          <select data-align-url="${url}">
+            <option value="none"  ${align==='none' ?'selected':''}>No wrap</option>
+            <option value="left"  ${align==='left' ?'selected':''}>Wrap – image left</option>
+            <option value="right" ${align==='right'?'selected':''}>Wrap – image right</option>
+          </select>
+        </div>`;
+      sizeRowsEl.appendChild(row);
+    }
+  }
+  sizingPanel.style.display = 'block';
+  sizingPanel.scrollIntoView({behavior: 'smooth'});
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.matches('#sizeRows select[data-url]')) {
+    const prevBucket = currentSizeMap.get(e.target.dataset.url);
+    if (!confirmDiscardEdits('Changing a diagram size')) {
+      e.target.value = prevBucket;
+      return;
+    }
+    currentSizeMap.set(e.target.dataset.url, e.target.value);
+    rerender();
+  } else if (e.target.matches('#sizeRows select[data-imgidx]')) {
+    const idx = parseInt(e.target.dataset.imgidx, 10);
+    const key = reviewImgKeys[idx];
+    const prevScale = currentImgScale.get(key) || 100;
+    if (!confirmDiscardEdits('Changing a diagram size')) {
+      e.target.value = prevScale;
+      return;
+    }
+    currentImgScale.set(key, parseInt(e.target.value, 10));
+    rerender();
+  } else if (e.target.matches('#sizeRows select[data-align-url]')) {
+    // A wrap change is purely a class toggle - no rerender, no discard risk.
+    currentImgAlign.set(e.target.dataset.alignUrl, e.target.value);
+    applyImageAlign();
+  } else if (e.target.matches('#sizeRows select[data-align-imgidx]')) {
+    const idx = parseInt(e.target.dataset.alignImgidx, 10);
+    currentImgAlign.set(reviewImgKeys[idx], e.target.value);
+    applyImageAlign();
+  }
+});
+
+closeSizing.addEventListener('click', () => { sizingPanel.style.display = 'none'; });
+</script>
+</body>
+</html>
