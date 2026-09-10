@@ -88,6 +88,19 @@
   #paper.compressed .part { margin: 2px 0 2px 22px; }
 
   #paper.exam .question { break-inside: avoid; page-break-after: always; padding-bottom: 4px; }
+
+  /* Optional: pin [Total: N marks] to the bottom of the page instead of
+     wherever the question's own content happens to end - matches the
+     convention real exam papers use. Only meaningful in exam mode, where a
+     question already occupies its own page; compressed mode has no such
+     thing as "this question's page" to pin to. min-height must match the
+     current @page content height (297mm - 2 x margin) - keep this in sync
+     with the @page margin below and the JS page-break-preview probe, which
+     both currently assume an 8mm margin (297 - 2x8 = 281mm). */
+  #paper.exam.total-bottom .question {
+    display: flex; flex-direction: column; min-height: 281mm;
+  }
+  #paper.exam.total-bottom .qtotal { margin-top: auto; padding-top: 12px; }
   #paper.exam .question:last-child { page-break-after: auto; }
   #paper.exam .qbody { font-size: 16px; line-height: 1.6; }
   #paper.exam img.diagram { display: block; margin: 14px auto; }
@@ -223,6 +236,7 @@
       <option value="right">Image right</option>
     </select>
   </label>
+  <label><input type="checkbox" id="totalBottomToggle"> Total at bottom of page (exam mode)</label>
   <span class="spacer"></span>
   <span id="status">Upload an ExamWizard (Edexcel) .doc file to begin.</span>
   <button id="printBtn" disabled>Print / Save as PDF</button>
@@ -1118,6 +1132,7 @@ const texBtn = document.getElementById('texBtn');
 const coverToggle = document.getElementById('coverToggle');
 const flattenToggle = document.getElementById('flattenToggle');
 const defaultWrapSelect = document.getElementById('defaultWrapSelect');
+const totalBottomToggle = document.getElementById('totalBottomToggle');
 let defaultImgAlign = 'none'; // fallback wrap direction for any image without its own per-image override
 const statusEl = document.getElementById('status');
 const paperEl = document.getElementById('paper');
@@ -1190,7 +1205,7 @@ paperEl.addEventListener('click', (e) => {
 function rerender() {
   if (!currentQuestions) return;
   const mode = modeSelect.value;
-  paperEl.className = mode;
+  paperEl.className = mode + (totalBottomToggle.checked ? ' total-bottom' : '');
   const title = (fileInput.files[0]?.name || 'Worksheet').replace(/\.(doc|rtf)$/i, '').replace(/[_-]+/g, ' ');
   const showCover = coverToggle.checked;
   let html = showCover ? coverPageHTML(title, computeTotalMarks(currentQuestions)) : '';
@@ -1325,6 +1340,12 @@ defaultWrapSelect.addEventListener('change', () => {
   // just a class toggle via applyImageAlign(), never a full rerender.
   defaultImgAlign = defaultWrapSelect.value;
   applyImageAlign();
+});
+
+totalBottomToggle.addEventListener('change', () => {
+  // Purely a CSS class toggle (see #paper.exam.total-bottom rules) - no
+  // rerender, so it never risks discarding in-progress edits.
+  paperEl.classList.toggle('total-bottom', totalBottomToggle.checked);
 });
 
 pdfBtn.addEventListener('click', () => {
