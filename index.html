@@ -68,8 +68,14 @@
 
   /* ---------- Paper / preview ---------- */
   #paper {
-    max-width: 800px; margin: 24px auto 80px; background: var(--paper);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15); padding: 36px 44px;
+    /* Deliberately matches @page below (210mm wide, 8mm top/bottom, 5mm
+       left/right) rather than a comfortable editing width. The manual
+       page-break feature measures pixel heights on screen to size the
+       [Total: N marks] pinning - if the screen content wrapped at a
+       different width to the real printed page, those measurements
+       wouldn't match the real pagination and could overflow a page. */
+    max-width: 210mm; margin: 24px auto 80px; background: var(--paper);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15); padding: 8mm 5mm;
     display: none;
   }
   #paper[contenteditable="true"] { cursor: text; outline: none; }
@@ -78,7 +84,7 @@
     outline: 1px dashed var(--accent); outline-offset: 4px;
   }
   #edit-hint {
-    max-width: 800px; margin: 0 auto; padding: 8px 4px 0;
+    max-width: 210mm; margin: 0 auto; padding: 8px 4px 0;
     font-family: var(--mono); font-size: 12px; color: #6b6a63; display: none;
   }
   #paper.compressed .question { break-inside: avoid; margin-bottom: 10px; }
@@ -100,6 +106,12 @@
   #paper.exam.total-bottom .question {
     display: flex; flex-direction: column; min-height: 281mm;
   }
+  /* qtotal is nested inside .qbody, not a direct child of .question, so
+     margin-top:auto on .qtotal alone has no effect (auto margins only do
+     anything on a direct flex item). .qbody must itself be the flex column
+     that stretches to fill the leftover space (flex:1) for its own last
+     child (.qtotal) to then get pushed to the bottom via margin-top:auto. */
+  #paper.exam.total-bottom .qbody { display: flex; flex-direction: column; flex: 1; }
   #paper.exam.total-bottom .qtotal { margin-top: auto; padding-top: 12px; }
   #paper.exam .question:last-child { page-break-after: auto; }
   #paper.exam .qbody { font-size: 16px; line-height: 1.6; }
@@ -126,10 +138,10 @@
 
   /* ---------- Print ---------- */
   @media print {
-    #controls, #sizing-panel { display: none !important; }
+    #controls, #sizing-panel, #edit-hint { display: none !important; }
     body { background: #fff; }
     #paper { box-shadow: none; margin: 0; max-width: none; padding: 0; display: block !important; }
-    @page { size: A4; margin: 8mm; }
+    @page { size: A4; margin: 8mm 5mm; }
   }
 
   /* ---------- Float containment / page-break fixes ----------
@@ -194,6 +206,38 @@
     white-space: nowrap;
   }
   @media print { .page-break-line { display: none !important; } }
+
+  /* ---------- Manual page breaks ----------
+     A REAL forced break: page-break-after/break-after is read by html2pdf's
+     'css' pagebreak mode exactly the same way it already reads
+     #paper.exam .question's page-break-after rule (confirmed working for
+     exam mode), so this is the reliable way to get an exact, guaranteed
+     break point instead of a guess. Kept deliberately minimal on screen -
+     the editor view isn't paginated, so a full-width divider line here
+     would look like it marks a real boundary when it doesn't; it's just a
+     small removable tag. */
+  .manual-break {
+    margin: 4px 0; page-break-after: always; break-after: page;
+  }
+  .manual-break .mb-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10px; color: #9a8f78;
+    background: #f2ede1; border-radius: 3px; padding: 2px 8px;
+  }
+  .manual-break .mb-remove {
+    cursor: pointer; border: none; background: none; color: #c0392b;
+    font-family: var(--mono); font-size: 10px; padding: 0;
+  }
+  .mb-insert-handle { display: flex; justify-content: center; margin: 2px 0; }
+  .mb-insert-handle button {
+    font-family: var(--mono); font-size: 10.5px; color: #9a8f78; background: none;
+    border: 1px dashed #b8a888; border-radius: 3px; padding: 2px 9px; cursor: pointer;
+  }
+  .mb-insert-handle button:hover { color: var(--accent); border-color: var(--accent); }
+  @media print {
+    .manual-break { margin: 0; }
+    .manual-break .mb-tag, .mb-insert-handle { display: none !important; }
+  }
 
   /* ---------- Cover page ---------- */
   .coverpage {
@@ -840,14 +884,25 @@ function coverPageHTML(title, totalMarks) {
 
 /* =========================================================================
    4d. ON-SCREEN PAGE BREAK PREVIEW
-   Simulates where the printed/PDF output will actually paginate, instead of
-   leaving the editor as one continuous scroll. The cover page (if present)
-   and, in "exam" layout, every question always start a fresh page - that
-   mirrors the print CSS's page-break-after:always rules exactly. In
-   "compressed" layout, questions flow freely until they stop fitting the
-   remaining space on an A4 page (measured against a hidden mm-sized probe
-   element, so it tracks the real print page height rather than a guessed
-   pixel value).
+   Only draws a line where a break is GUARANTEED, never a guess: the cover
+   page (if present) always starts a fresh page, "exam" layout forces every
+   question onto its own page, and in "compressed" layout a break only
+   happens where the user has explicitly inserted a manual one (see 4d-ii
+   below). There is deliberately no height-based overflow guessing any
+   more - it could only ever approximate where html2pdf's own internal
+   canvas-slicing would actually land the real page break, so the two
+   routinely disagreed. Compressed mode now flows completely freely unless
+   a manual break says otherwise.
+
+   NOTE: this used to also inflate the previous question's height to pin
+   its [Total: N marks] line to the exact bottom of the page. That relied
+   on a JS-measured "space remaining on this page" figure carrying over
+   unchanged into the real print/PDF layout - which in practice never held
+   reliably (screen-width vs print-width text wrapping, font hinting/
+   rounding differences between on-screen and printed rendering, etc), and
+   produced blank pages when the estimate overshot. Removed - a guaranteed,
+   correctly-placed break is more valuable than an unreliable cosmetic
+   pin, and this way there's nothing left that can silently miscalculate.
    ========================================================================= */
 function computeAndShowPageBreaks(mode) {
   paperEl.querySelectorAll('.page-break-line').forEach(el => el.remove());
@@ -855,35 +910,93 @@ function computeAndShowPageBreaks(mode) {
     el.classList.contains('question') || el.classList.contains('coverpage'));
   if (!blocks.length) return 0;
 
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:absolute;visibility:hidden;height:281mm;width:1px;';
-  document.body.appendChild(probe);
-  const pagePx = probe.offsetHeight || 1000;
-  probe.remove();
-
-  const paperTop = paperEl.getBoundingClientRect().top + window.scrollY;
-  let pageStart = 0;
-  let breaks = 0;
-
   blocks.forEach((b, i) => {
-    const rect = b.getBoundingClientRect();
-    const top = rect.top + window.scrollY - paperTop;
-    const bottom = top + rect.height;
     const afterCover = i > 0 && blocks[i - 1].classList.contains('coverpage');
-    const forced = i > 0 && (mode === 'exam' || afterCover);
-    const overflow = !forced && i > 0 && (bottom - pageStart) > pagePx;
+    const manualBreakBefore = i > 0 && b.previousElementSibling &&
+      b.previousElementSibling.classList.contains('manual-break');
+    const forced = i > 0 && (mode === 'exam' || afterCover || manualBreakBefore);
 
-    if (forced || overflow) {
-      breaks++;
-      const line = document.createElement('div');
-      line.className = 'page-break-line';
-      line.innerHTML = `<span>~ page break (approx.) ~</span>`;
-      b.parentNode.insertBefore(line, b);
-      pageStart = top;
+    if (forced) {
+      if (!manualBreakBefore) {
+        // Manual breaks show their own small removable tag - don't also
+        // draw a guessed line next to it.
+        const line = document.createElement('div');
+        line.className = 'page-break-line';
+        line.innerHTML = `<span>~ page break ~</span>`;
+        b.parentNode.insertBefore(line, b);
+      }
     }
   });
 
-  return breaks + 1;
+  return paperEl.querySelectorAll('.page-break-line, .manual-break').length + 1;
+}
+
+/* =========================================================================
+   4d-ii. MANUAL PAGE BREAKS
+
+   Screen-only "+ page break" handles between top-level questions let the
+   user force an exact, guaranteed page break at a specific point. Only
+   offered in "compressed" layout, which is otherwise fully free-flowing -
+   "exam" layout already guarantees one question per page on its own, so
+   there's nothing for a manual break to add there. Handles/markers are
+   plain DOM nodes inserted directly into the live paperEl, the same way
+   contenteditable text edits are - they're wiped by a full rerender() like
+   any other in-progress edit, which is why insertManualBreak() below sets
+   paperEdited = true so confirmDiscardEdits() warns before they're lost.
+   ========================================================================= */
+function resetManualBreakSizing() {
+  paperEl.querySelectorAll('.question').forEach(q => {
+    q.style.minHeight = ''; q.style.display = ''; q.style.flexDirection = '';
+  });
+  paperEl.querySelectorAll('.qbody').forEach(qb => {
+    qb.style.display = ''; qb.style.flexDirection = ''; qb.style.flex = '';
+  });
+  paperEl.querySelectorAll('.qtotal').forEach(t => {
+    t.style.marginTop = ''; t.style.paddingTop = '';
+  });
+}
+
+function addManualBreakHandles() {
+  paperEl.querySelectorAll('.mb-insert-handle').forEach(el => el.remove());
+  if (modeSelect.value !== 'compressed') return;
+  const questions = Array.from(paperEl.querySelectorAll(':scope > .question'));
+  questions.forEach((q, i) => {
+    if (i === questions.length - 1) return; // nothing to push to a next page
+    if (q.nextElementSibling && q.nextElementSibling.classList.contains('manual-break')) return;
+    const handle = document.createElement('div');
+    handle.className = 'mb-insert-handle';
+    handle.setAttribute('contenteditable', 'false');
+    handle.innerHTML = `<button type="button">+ page break</button>`;
+    handle.querySelector('button').addEventListener('click', (e) => {
+      e.preventDefault();
+      insertManualBreak(q);
+    });
+    q.parentNode.insertBefore(handle, q.nextElementSibling);
+  });
+}
+
+function refreshPagination() {
+  resetManualBreakSizing();
+  computeAndShowPageBreaks(modeSelect.value);
+  addManualBreakHandles();
+}
+
+function insertManualBreak(afterQuestionEl) {
+  const marker = document.createElement('div');
+  marker.className = 'manual-break';
+  marker.setAttribute('contenteditable', 'false');
+  marker.innerHTML = `<span class="mb-tag">page break <button type="button" class="mb-remove">✕</button></span>`;
+  marker.querySelector('.mb-remove').addEventListener('click', (e) => {
+    e.preventDefault();
+    marker.remove();
+    paperEdited = true;
+    refreshPagination();
+  });
+  const existingHandle = afterQuestionEl.nextElementSibling;
+  if (existingHandle && existingHandle.classList.contains('mb-insert-handle')) existingHandle.remove();
+  afterQuestionEl.parentNode.insertBefore(marker, afterQuestionEl.nextSibling);
+  paperEdited = true;
+  refreshPagination();
 }
 
 /* =========================================================================
@@ -1224,6 +1337,7 @@ function rerender() {
     const pageCount = computeAndShowPageBreaks(mode);
     const pagesEl = paperEl.querySelector('.cp-pages');
     if (pagesEl) pagesEl.textContent = pageCount;
+    addManualBreakHandles();
   });
 }
 
@@ -1366,22 +1480,34 @@ pdfBtn.addEventListener('click', () => {
   // editing for the duration, then restore both afterward either way.
   const hiddenLines = Array.from(paperEl.querySelectorAll('.page-break-line'));
   hiddenLines.forEach(el => { el.style.display = 'none'; });
+  // Manual-break markers must stay in the DOM (their page-break-after is
+  // what forces the real break) - only their on-screen label/remove button
+  // and the "+ page break" insert handles are editor-only chrome.
+  const hiddenBreakUi = Array.from(paperEl.querySelectorAll('.manual-break .mb-tag, .mb-insert-handle'));
+  hiddenBreakUi.forEach(el => { el.style.display = 'none'; });
   const wasEditable = paperEl.getAttribute('contenteditable');
   paperEl.removeAttribute('contenteditable');
 
   const restore = () => {
     hiddenLines.forEach(el => { el.style.display = ''; });
+    hiddenBreakUi.forEach(el => { el.style.display = ''; });
     if (wasEditable !== null) paperEl.setAttribute('contenteditable', wasEditable);
     pdfBtn.disabled = false;
   };
 
   const opt = {
-    margin: 8,
+    margin: [8, 5],
     filename: filenameBase + '.pdf',
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] }
+    // 'legacy' mode does independent height-based canvas slicing on top of
+    // whatever 'css' mode already restructured for forced breaks - mixing
+    // the two is a long-standing, still-open html2pdf.js bug (moves the
+    // next element past the forced break, then height-slices it AGAIN,
+    // leaving a blank page): github.com/eKoopmans/html2pdf.js/issues/184.
+    // 'css' alone still respects page-break-after/before/inside.
+    pagebreak: { mode: ['css'] }
   };
   html2pdf().set(opt).from(paperEl).save().then(() => {
     statusEl.textContent = 'PDF downloaded.';
