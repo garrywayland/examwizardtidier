@@ -297,7 +297,7 @@
 </div>
 
 <div id="paper" class="compressed"></div>
-<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
+<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript as soon as you type a space or punctuation after it. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
 
 <script>
 /* =========================================================================
@@ -1152,6 +1152,99 @@ function normaliseExamBuilder(questions) {
 }
 
 /* =========================================================================
+   4f. MANUAL SUPERSCRIPT OVERRIDE
+   The equation-editor-style shorthand: type "^" followed by the exponent
+   and it converts to a real <sup> the moment a delimiter (space, comma,
+   closing bracket, punctuation) is typed after it - same feel as Word's
+   AutoCorrect for x^2. Multi-character exponents use braces or parens,
+   e.g. x^{2n+1} or x^(2n+1), which get unwrapped into the <sup> content.
+   Runs both live (on keyup, for immediate feedback while typing) and in
+   bulk (on rerender()/blur, to sweep up anything typed without stopping
+   on a delimiter, or present in the source text itself on first load).
+   ========================================================================= */
+const CARET_SUP_RE = /\^(\{[^{}]+\}|\(-?[A-Za-z0-9]+\)|-?[A-Za-z0-9]+)/g;
+
+function unwrapCaretToken(token) {
+  if ((token[0] === '{' && token.slice(-1) === '}') ||
+      (token[0] === '(' && token.slice(-1) === ')')) {
+    return token.slice(1, -1);
+  }
+  return token;
+}
+
+function applyManualSuperscripts(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.data.includes('^')) return NodeFilter.FILTER_REJECT;
+      if (node.parentElement && node.parentElement.closest('sup, sub, .eq-rendered, script, style')) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+
+  nodes.forEach(node => {
+    const text = node.data;
+    CARET_SUP_RE.lastIndex = 0;
+    if (!CARET_SUP_RE.test(text)) return;
+    CARET_SUP_RE.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0, m;
+    while ((m = CARET_SUP_RE.exec(text))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const sup = document.createElement('sup');
+      sup.textContent = unwrapCaretToken(m[1]);
+      frag.appendChild(sup);
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  });
+}
+
+// Live version: fires on a delimiter keystroke, converts only the token
+// that just ended, and leaves the caret sitting right where it was.
+function convertCaretAtCaretPosition() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  if (node.nodeType !== Node.TEXT_NODE) return;
+  if (node.parentElement && node.parentElement.closest('sup, sub, .eq-rendered')) return;
+
+  const offset = range.startOffset;
+  if (offset === 0) return;
+  const text = node.data;
+  const beforeCaret = text.slice(0, offset);
+  const beforeDelim = beforeCaret.slice(0, -1); // strip the delimiter just typed
+
+  const m = beforeDelim.match(/\^(\{[^{}]+\}|\(-?[A-Za-z0-9]+\)|-?[A-Za-z0-9]+)$/);
+  if (!m) return;
+
+  const matchStart = beforeDelim.length - m[0].length;
+  const matchEnd = beforeDelim.length;
+  const prefixNode = document.createTextNode(text.slice(0, matchStart));
+  const sup = document.createElement('sup');
+  sup.textContent = unwrapCaretToken(m[1]);
+  const suffixNode = document.createTextNode(text.slice(matchEnd)); // delimiter + rest
+
+  const frag = document.createDocumentFragment();
+  frag.appendChild(prefixNode);
+  frag.appendChild(sup);
+  frag.appendChild(suffixNode);
+  node.parentNode.replaceChild(frag, node);
+
+  const newRange = document.createRange();
+  newRange.setStart(suffixNode, 0);
+  newRange.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+}
+
+/* =========================================================================
    5. UI WIRING
    ========================================================================= */
 let currentQuestions = null;
@@ -1308,6 +1401,18 @@ paperEl.addEventListener('input', () => {
   statusEl.textContent = 'Editing… (your changes here are local to this browser tab only)';
 });
 
+// Manual superscript override: convert "x^2" / "x^{2n+1}" / "x^(2n+1)" into
+// a real <sup> the instant a delimiter follows it, so typed powers don't
+// have to be manually selected and formatted like Ctrl/Cmd+I for italics.
+paperEl.addEventListener('keyup', (e) => {
+  if ([' ', ')', ',', '.', ';', ':'].includes(e.key)) {
+    convertCaretAtCaretPosition();
+  }
+});
+paperEl.addEventListener('blur', () => {
+  applyManualSuperscripts(paperEl); // catches a trailing ^2 typed with no delimiter after it
+});
+
 // Manual equation entry - works without any OCR proxy configured. Click any
 // flagged equation crop (or an already-transcribed one, to fix it) and type
 // or paste its LaTeX directly.
@@ -1372,6 +1477,7 @@ function rerender() {
   applyImageScale();
   applyImageAlign();
   applyOcrResults();
+  applyManualSuperscripts(paperEl);
   if (flattenToggle.checked) flattenLineBreaks();
   requestAnimationFrame(() => {
     const pageCount = computeAndShowPageBreaks(mode);
