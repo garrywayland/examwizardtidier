@@ -297,23 +297,24 @@
 </div>
 
 <div id="paper" class="compressed"></div>
-<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Click an equation-sized image to type its LaTeX by hand (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
+<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
 
 <script>
 /* =========================================================================
    1. RTF TOKENIZER
    Ported from the Python prototype. Walks the RTF byte/char stream tracking
-   group nesting, control words, bold/italic state, and \pict blobs
-   (jpeg/png only). Produces a flat array of "runs":
-     {type:'text', text, bold, italic}  or  {type:'img', url}
+   group nesting, control words, bold/italic/superscript/subscript state,
+   and \pict blobs (jpeg/png only). Produces a flat array of "runs":
+     {type:'text', text, bold, italic, vert}  or  {type:'img', url}
+   vert is null, 'super', or 'sub'.
    ========================================================================= */
 function parseRTF(data) {
   const runs = [];
-  let bold = false, italic = false;
+  let bold = false, italic = false, vert = null;
   let buf = [];
   const flush = () => {
     if (buf.length) {
-      runs.push({type: 'text', text: buf.join(''), bold, italic});
+      runs.push({type: 'text', text: buf.join(''), bold, italic, vert});
       buf = [];
     }
   };
@@ -374,6 +375,12 @@ function parseRTF(data) {
           flush(); bold = (arg !== '0'); i += consumed; continue;
         } else if (word === 'i') {
           flush(); italic = (arg !== '0'); i += consumed; continue;
+        } else if (word === 'super') {
+          flush(); vert = (arg !== '0') ? 'super' : null; i += consumed; continue;
+        } else if (word === 'sub') {
+          flush(); vert = (arg !== '0') ? 'sub' : null; i += consumed; continue;
+        } else if (word === 'nosupersub') {
+          flush(); vert = null; i += consumed; continue;
         } else if (word === 'u') {
           let cp = parseInt(arg, 10);
           if (cp < 0) cp += 65536;
@@ -408,8 +415,8 @@ function parseRTF(data) {
    Build a plaintext shadow of the runs (one placeholder char per image) so
    we can regex-split on "Qn." / "(a)" / "(Total for question = N marks)"
    the same way as the plaintext, then slice the ORIGINAL runs at matching
-   offsets. This keeps bold/italic/image info intact per fragment without
-   ever needing to "re-balance" open/close markers.
+   offsets. This keeps bold/italic/vert/image info intact per fragment
+   without ever needing to "re-balance" open/close markers.
    ========================================================================= */
 const IMG_PLACEHOLDER = '\u0000';
 
@@ -441,7 +448,7 @@ function sliceRuns(runs, runOf, start, end) {
     const firstGlobal = runOf.indexOf(ridx);
     const localLo = lo - firstGlobal, localHi = hi - firstGlobal + 1;
     const sub = r.text.substring(localLo, localHi);
-    if (sub) out.push({type: 'text', text: sub, bold: r.bold, italic: r.italic});
+    if (sub) out.push({type: 'text', text: sub, bold: r.bold, italic: r.italic, vert: r.vert});
   }
   return out;
 }
@@ -654,14 +661,22 @@ function parseExamBuilder(raw) {
       img.setAttribute('style', `width:${wmm}mm;height:${hmm}mm;vertical-align:middle;`);
       img.setAttribute('data-base-w', wmm);
       img.setAttribute('data-base-h', hmm);
-      // Small crops (roughly under 2cm) are almost always inline maths
-      // fragments (fractions, single symbols) rather than full diagrams -
-      // flag them as OCR candidates and give them a stable id so a later
-      // pass can swap the picture for a transcribed/rendered equation.
-      if (wmm <= 20 && hmm <= 14) {
-        img.setAttribute('data-eq-candidate', '1');
-        img.setAttribute('id', 'eqimg-' + (++eqImgCounter));
-      }
+    }
+    // Every image - not just small crops - can be clicked to hand-enter its
+    // LaTeX (some boards export whole equations, including big stacked
+    // fractions/surds, as one picture rather than as small inline symbol
+    // crops). data-eq-candidate + a stable id drives that click handler for
+    // ANY image. data-eq-auto is a narrower flag (small crops only, the
+    // ones overwhelmingly likely to be inline maths rather than a genuine
+    // diagram) used only to decide which images the bulk "Transcribe
+    // equations" button auto-sends to the OCR proxy, so it doesn't waste
+    // calls trying to transcribe geometry diagrams/graphs as equations.
+    img.setAttribute('data-eq-candidate', '1');
+    img.setAttribute('id', 'eqimg-' + (++eqImgCounter));
+    if (w && h) {
+      const wmm = parseFloat(img.getAttribute('data-base-w'));
+      const hmm = parseFloat(img.getAttribute('data-base-h'));
+      if (wmm <= 20 && hmm <= 14) img.setAttribute('data-eq-auto', '1');
     }
     img.removeAttribute('width');
     img.removeAttribute('height');
@@ -787,13 +802,32 @@ function esc(s) {
           .replace(/[\u00a0\u0000]/g,' ');
 }
 
+// Deterministic short id from a blob URL, so the SAME image gets the SAME
+// id on every rerender() call (runsToHTML rebuilds the <img> tags from
+// scratch each time - a plain incrementing counter would hand out a
+// different id after every edit/toggle and orphan anything already saved
+// in ocrResults against the old id). djb2-ish string hash, base36.
+function stableIdFromUrl(url) {
+  let hash = 5381;
+  for (let i = 0; i < url.length; i++) {
+    hash = ((hash * 33) ^ url.charCodeAt(i)) | 0;
+  }
+  return 'eqimg-' + (hash >>> 0).toString(36);
+}
+
 function runsToHTML(runs, sizeMap) {
   let out = '';
   for (const r of runs) {
     if (r.type === 'img') {
       const bucket = sizeMap.get(r.url) || 'medium';
       const pct = SIZE_BUCKET_PCT[bucket];
-      out += `<img class="diagram" data-url="${r.url}" src="${r.url}" style="width:${pct}%">`;
+      // ExamWizard/RTF exports have no ExamBuilder-style physical-size data
+      // to tell a small maths crop from a genuine diagram, so every RTF
+      // image is made clickable for manual LaTeX entry (the id is derived
+      // from the stable blob url, not a render-order counter - see
+      // stableIdFromUrl - so a saved transcription survives rerenders).
+      const eqId = stableIdFromUrl(r.url);
+      out += `<img class="diagram" data-url="${r.url}" src="${r.url}" style="width:${pct}%" data-eq-candidate="1" id="${eqId}">`;
       continue;
     }
     let t = esc(r.text);
@@ -801,6 +835,8 @@ function runsToHTML(runs, sizeMap) {
     t = t.replace(/\n/g, ' ');
     if (r.bold) t = `<strong>${t}</strong>`;
     if (r.italic) t = `<em>${t}</em>`;
+    if (r.vert === 'super') t = `<sup>${t}</sup>`;
+    else if (r.vert === 'sub') t = `<sub>${t}</sub>`;
     out += t;
   }
   out = out.replace(/\[answer in ([^\]]+)\]/gi, '<span class="answer-hint">[Answer in $1]</span>');
@@ -1001,11 +1037,11 @@ function insertManualBreak(afterQuestionEl) {
 
 /* =========================================================================
    4e. LATEX EXPORT
-   Best-effort structural export - text, bold/italic, part labels, marks and
-   the [answer in ...] hints translate directly. Diagrams only ever exist as
-   bitmap crops here (there's no vector/LaTeX source to recover), so they're
-   left as a clearly-flagged placeholder rather than silently dropped or
-   guessed at.
+   Best-effort structural export - text, bold/italic, superscript/subscript,
+   part labels, marks and the [answer in ...] hints translate directly.
+   Diagrams only ever exist as bitmap crops here (there's no vector/LaTeX
+   source to recover), so they're left as a clearly-flagged placeholder
+   rather than silently dropped or guessed at.
    ========================================================================= */
 function escLatex(s) {
   return String(s)
@@ -1026,6 +1062,8 @@ function domToLatex(node) {
     const inner = domToLatex(c);
     if (tag === 'strong' || tag === 'b') out += `\\textbf{${inner}}`;
     else if (tag === 'em' || tag === 'i') out += `\\textit{${inner}}`;
+    else if (tag === 'sup') out += `$^{${inner}}$`;
+    else if (tag === 'sub') out += `$_{${inner}}$`;
     else if (tag === 'span' && c.classList.contains('answer-hint')) out += ` \\hfill\\textit{${inner}}`;
     else if (tag === 'p' || tag === 'div') out += inner + '\\par\n';
     else out += inner;
@@ -1039,6 +1077,8 @@ function runsToLatex(runs) {
     let t = escLatex(r.text.replace(/\[answer in ([^\]]+)\]/gi, '\\hfill\\textit{[Answer in $1]}'));
     if (r.bold) t = `\\textbf{${t}}`;
     if (r.italic) t = `\\textit{${t}}`;
+    if (r.vert === 'super') t = `$^{${t}}$`;
+    else if (r.vert === 'sub') t = `$_{${t}}$`;
     return t.replace(/\n+/g, ' \\\\ ');
   }).join(' ');
 }
@@ -1342,7 +1382,11 @@ function rerender() {
 }
 
 ocrBtn.addEventListener('click', async () => {
-  const candidates = [...paperEl.querySelectorAll('img[data-eq-candidate]')];
+  // Bulk auto-transcribe only targets the small-crop heuristic subset
+  // (data-eq-auto) - unlike a manual click, which works on any image, this
+  // fires the OCR proxy unattended and would waste calls (and likely
+  // hallucinate LaTeX) trying to "transcribe" a genuine diagram or graph.
+  const candidates = [...paperEl.querySelectorAll('img[data-eq-auto]')];
   if (!candidates.length) { statusEl.textContent = 'No equation-sized images found to transcribe.'; return; }
   if (!GEMINI_PROXY_URL) {
     statusEl.textContent = 'Set GEMINI_PROXY_URL near the top of the script to your Apps Script Web App URL first.';
@@ -1410,15 +1454,19 @@ fileInput.addEventListener('change', async () => {
     rerender();
     const imgCount = format === 'rtf' ? collectImgRuns(questions).length
                                        : paperEl.querySelectorAll('img').length;
-    const eqCount = paperEl.querySelectorAll('img[data-eq-candidate]').length;
+    // eqAutoCount (data-eq-auto) is the narrow small-crop heuristic subset
+    // used only to size the bulk-OCR message/button below. Every image,
+    // regardless of that heuristic, is clickable for manual LaTeX entry -
+    // see the data-eq-candidate note in runsToHTML/parseExamBuilder.
+    const eqAutoCount = paperEl.querySelectorAll('img[data-eq-auto]').length;
     statusEl.textContent = `${questions.length} questions extracted` +
-      (imgCount ? `, ${imgCount} images` : '') +
-      (eqCount ? ` (${eqCount} look like equations - click one to type its LaTeX, or try "Transcribe equations" if you have a proxy set up).` : '.');
+      (imgCount ? `, ${imgCount} images (click any image to type its LaTeX if it's an equation)` : '') +
+      (eqAutoCount ? ` — ${eqAutoCount} look like small equation crops, try "Transcribe equations" if you have a proxy set up.` : '.');
     printBtn.disabled = false;
     pdfBtn.disabled = false; texBtn.disabled = false;
     const reviewableCount = format === 'rtf' ? currentSizeMap.size : paperEl.querySelectorAll('img[data-base-w]').length;
     reviewBtn.disabled = (reviewableCount === 0);
-    ocrBtn.disabled = (eqCount === 0);
+    ocrBtn.disabled = (eqAutoCount === 0);
   };
   reader.readAsText(file, 'ISO-8859-1');
 });
