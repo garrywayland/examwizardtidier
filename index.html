@@ -1404,14 +1404,7 @@ paperEl.addEventListener('input', () => {
 // Manual superscript override: convert "x^2" / "x^{2n+1}" / "x^(2n+1)" into
 // a real <sup> the instant a delimiter follows it, so typed powers don't
 // have to be manually selected and formatted like Ctrl/Cmd+I for italics.
-paperEl.addEventListener('keyup', (e) => {
-  if ([' ', ')', ',', '.', ';', ':'].includes(e.key)) {
-    convertCaretAtCaretPosition();
-  }
-});
-paperEl.addEventListener('blur', () => {
-  applyManualSuperscripts(paperEl); // catches a trailing ^2 typed with no delimiter after it
-});
+
 
 // Manual equation entry - works without any OCR proxy configured. Click any
 // flagged equation crop (or an already-transcribed one, to fix it) and type
@@ -1477,7 +1470,6 @@ function rerender() {
   applyImageScale();
   applyImageAlign();
   applyOcrResults();
-  applyManualSuperscripts(paperEl);
   if (flattenToggle.checked) flattenLineBreaks();
   requestAnimationFrame(() => {
     const pageCount = computeAndShowPageBreaks(mode);
