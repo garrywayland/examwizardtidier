@@ -835,8 +835,6 @@ function runsToHTML(runs, sizeMap) {
     t = t.replace(/\n/g, ' ');
     if (r.bold) t = `<strong>${t}</strong>`;
     if (r.italic) t = `<em>${t}</em>`;
-    if (r.vert === 'super') t = `<sup>${t}</sup>`;
-    else if (r.vert === 'sub') t = `<sub>${t}</sub>`;
     out += t;
   }
   out = out.replace(/\[answer in ([^\]]+)\]/gi, '<span class="answer-hint">[Answer in $1]</span>');
