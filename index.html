@@ -50,6 +50,14 @@
   #status { font-size: 12px; opacity: 0.8; }
   .spacer { flex: 1; }
 
+  /* ---------- Superscript instructions banner (screen only) ---------- */
+  #sup-banner {
+    max-width: 900px; margin: 16px auto 0; background: #fff7e0;
+    border: 1px solid #e0c98a; border-radius: 6px; padding: 10px 16px;
+    font-family: var(--mono); font-size: 12.5px; color: #4a3f1e; line-height: 1.5;
+  }
+  #sup-banner strong { color: var(--accent); }
+
   /* ---------- Sizing review panel ---------- */
   #sizing-panel {
     display: none;
@@ -138,7 +146,7 @@
 
   /* ---------- Print ---------- */
   @media print {
-    #controls, #sizing-panel, #edit-hint { display: none !important; }
+    #controls, #sizing-panel, #edit-hint, #sup-banner { display: none !important; }
     body { background: #fff; }
     #paper { box-shadow: none; margin: 0; max-width: none; padding: 0; display: block !important; }
     @page { size: A4; margin: 8mm 5mm; }
@@ -286,6 +294,14 @@
   <button id="printBtn" disabled>Print / Save as PDF</button>
   <button id="pdfBtn" class="primary" disabled>Download PDF</button>
   <button id="texBtn" disabled>Download LaTeX</button>
+</div>
+
+<div id="sup-banner">
+  <strong>Superscripts:</strong> nothing converts to a superscript automatically anymore — any
+  <code>&lt;sup&gt;/&lt;sub&gt;</code> markup from the source file is flattened to plain text on import.
+  To add one yourself, type it as <code>^2</code> (or <code>^{2n+1}</code> / <code>^(2n+1)</code> for
+  multi-character powers) directly in the paper and it converts to a real superscript as soon as you
+  type a space or punctuation afterwards. You can also click any equation image to type its LaTeX by hand.
 </div>
 
 <div id="sizing-panel">
@@ -709,6 +725,16 @@ function parseExamBuilder(raw) {
       while (contentSpan && contentSpan.tagName !== 'SPAN') contentSpan = contentSpan.nextElementSibling;
       if (!contentSpan) continue;
 
+      // Ignore auto-superscript/subscript markup baked into the source
+      // export - only manually-entered "^2"-style superscripts (see the
+      // caret-conversion helpers below) should ever render as superscript.
+      // Unwrap any <sup>/<sub> tags here to plain text before we go any
+      // further, so nothing downstream (rendering or the LaTeX export)
+      // ever sees them.
+      contentSpan.querySelectorAll('sup, sub').forEach(el => {
+        el.replaceWith(document.createTextNode(el.textContent));
+      });
+
       // pull out the right-aligned [N] marks tag(s). A simple part has one;
       // a part with roman-numeral sub-items (i, ii, iii) has several, each
       // already correctly positioned next to its own sub-item - leave those
@@ -833,6 +859,12 @@ function runsToHTML(runs, sizeMap) {
     let t = esc(r.text);
     t = t.split(/\n\s*\n+/).join('</p><p>');
     t = t.replace(/\n/g, ' ');
+    // Note: r.vert ('super'/'sub', parsed from the RTF \super/\sub control
+    // words) is deliberately NOT applied here. Auto-detected superscripts
+    // from the source file are ignored on purpose - the only way to get a
+    // superscript in the output is to type "^2" style shorthand yourself
+    // (see applyManualSuperscripts/convertCaretAtCaretPosition below) or
+    // click an equation image and enter LaTeX by hand.
     if (r.bold) t = `<strong>${t}</strong>`;
     if (r.italic) t = `<em>${t}</em>`;
     out += t;
@@ -1075,8 +1107,10 @@ function runsToLatex(runs) {
     let t = escLatex(r.text.replace(/\[answer in ([^\]]+)\]/gi, '\\hfill\\textit{[Answer in $1]}'));
     if (r.bold) t = `\\textbf{${t}}`;
     if (r.italic) t = `\\textit{${t}}`;
-    if (r.vert === 'super') t = `$^{${t}}$`;
-    else if (r.vert === 'sub') t = `$_{${t}}$`;
+    // r.vert (auto-detected super/sub from the source RTF) is deliberately
+    // ignored here too, for the same reason as in runsToHTML - only
+    // manually-typed "^2" shorthand or hand-entered LaTeX should ever
+    // produce a superscript/subscript in the output.
     return t.replace(/\n+/g, ' \\\\ ');
   }).join(' ');
 }
@@ -1402,7 +1436,19 @@ paperEl.addEventListener('input', () => {
 // Manual superscript override: convert "x^2" / "x^{2n+1}" / "x^(2n+1)" into
 // a real <sup> the instant a delimiter follows it, so typed powers don't
 // have to be manually selected and formatted like Ctrl/Cmd+I for italics.
-
+// Fires live on every keystroke (cheap - it bails out immediately unless
+// the caret sits right after a delimiter that completes a "^..." token),
+// and again in bulk on blur to sweep up anything that slipped through
+// (e.g. pasted text, or a token finished right as focus left the paper).
+paperEl.addEventListener('keyup', (e) => {
+  if (e.key === ' ' || e.key === ',' || e.key === '.' || e.key === ')' ||
+      e.key === ']' || e.key === ';' || e.key === ':' || e.key === 'Enter') {
+    convertCaretAtCaretPosition();
+  }
+});
+paperEl.addEventListener('blur', () => {
+  applyManualSuperscripts(paperEl);
+}, true);
 
 // Manual equation entry - works without any OCR proxy configured. Click any
 // flagged equation crop (or an already-transcribed one, to fix it) and type
@@ -1468,6 +1514,10 @@ function rerender() {
   applyImageScale();
   applyImageAlign();
   applyOcrResults();
+  // Sweep for any "^2"-style shorthand already present in the freshly
+  // rendered text (e.g. typed just before a mode switch, or left over in
+  // source text) so it converts even though no keyup/blur fired for it.
+  applyManualSuperscripts(paperEl);
   if (flattenToggle.checked) flattenLineBreaks();
   requestAnimationFrame(() => {
     const pageCount = computeAndShowPageBreaks(mode);
