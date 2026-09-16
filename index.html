@@ -144,9 +144,17 @@
   img[data-eq-candidate] { cursor: pointer; }
   img[data-eq-candidate]:hover, .eq-rendered:hover { outline: 1px dashed #8a7a5c; }
 
+  /* A letter immediately followed by a digit (x2, cm2, H0...) is flagged as
+     a possible missed superscript/subscript so it's easy to spot and fix -
+     see the "SUSPECTED-EXPONENT/SUBSCRIPT FLAGGING" section in the script. */
+  .sup-flag { background: #fff2b3; outline: 1px dashed #b8952b; outline-offset: 1px; border-radius: 2px; padding: 0 1px; cursor: pointer; }
+  .sup-flag:hover { background: #ffe98f; }
+
   /* ---------- Print ---------- */
   @media print {
     #controls, #sizing-panel, #edit-hint, #sup-banner { display: none !important; }
+    /* Anything left un-triaged prints as plain text, not a yellow box. */
+    .sup-flag { background: none !important; outline: none !important; }
     body { background: #fff; }
     #paper { box-shadow: none; margin: 0; max-width: none; padding: 0; display: block !important; }
     @page { size: A4; margin: 8mm 5mm; }
@@ -297,11 +305,13 @@
 </div>
 
 <div id="sup-banner">
-  <strong>Superscripts:</strong> nothing converts to a superscript automatically anymore — any
-  <code>&lt;sup&gt;/&lt;sub&gt;</code> markup from the source file is flattened to plain text on import.
-  To add one yourself, type it as <code>^2</code> (or <code>^{2n+1}</code> / <code>^(2n+1)</code> for
-  multi-character powers) directly in the paper and it converts to a real superscript as soon as you
-  type a space or punctuation afterwards. You can also click any equation image to type its LaTeX by hand.
+  <strong>Superscripts:</strong> nothing converts automatically — any <code>&lt;sup&gt;/&lt;sub&gt;</code>
+  markup from the source file is flattened to plain text on import. Anything that looks like it might
+  need fixing (a letter directly followed by a digit, e.g. the "2" in "x2") is highlighted in
+  <span class="sup-flag" style="cursor:default;">yellow</span> — click it to make superscript,
+  Shift+click to make subscript, or Alt+click to leave it as plain text. You can also type <code>^2</code>
+  (or <code>^{2n+1}</code> / <code>^(2n+1)</code> for multi-character powers) anywhere in the paper and
+  it converts on its own shortly after you stop typing, or click any equation image to type its LaTeX by hand.
 </div>
 
 <div id="sizing-panel">
@@ -313,7 +323,7 @@
 </div>
 
 <div id="paper" class="compressed"></div>
-<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript as soon as you type a space or punctuation after it. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
+<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript shortly after you stop typing. Yellow-highlighted digits are suspected missed superscripts/subscripts — click = superscript, Shift+click = subscript, Alt+click = leave as-is. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
 
 <script>
 /* =========================================================================
@@ -1277,6 +1287,87 @@ function convertCaretAtCaretPosition() {
 }
 
 /* =========================================================================
+   4g. SUSPECTED-EXPONENT/SUBSCRIPT FLAGGING
+   A letter immediately followed by a digit (x2, cm2, H0, r2...) is very
+   often a superscript or subscript that got flattened to plain text on
+   import. Auto-converting these was tried and dropped - the same shape
+   covers real exponents (x2 -> x^2), units (cm2 -> cm^2), AND subscript
+   notation (H0, H1 for hypotheses; x1, x2 for indexed variables), so a
+   blind guess is wrong often enough to not be worth it. Instead, flag the
+   digit(s) so they're easy to spot on the page, and let a click resolve
+   it: click = superscript, Shift+click = subscript, Alt+click = leave as
+   plain text (dismiss the flag without converting).
+   Runs once per render, scoped to each question's .qbody only (so a
+   question number like "Q2." or a mark count never gets flagged).
+
+   Word/ExamBuilder HTML exports wrap almost every run in its own <span>
+   for font metadata, so the letter and the very next digit are very often
+   in DIFFERENT text nodes even though nothing visually separates them
+   (e.g. <span>x</span><span>2</span>). Matching within one text node at a
+   time (the first version of this) missed most real cases because of
+   that. Instead this walks the whole subtree building one indexed string
+   (with a "\n" boundary inserted at each block-level element - p, div,
+   br, li, table cells/rows - so a match can never bridge two genuinely
+   separate bits of text), matches the pattern against that combined
+   string, then uses a Range to splice in the flag span even when the
+   match's characters come from several different source nodes. Matches
+   are resolved in reverse document order so that splicing one match never
+   invalidates the node/offset references already recorded for another.
+   ========================================================================= */
+const SUSPECT_RE = /([A-Za-z])(\d{1,3})(?!\d)/g;
+const SUSPECT_BREAK_TAGS = new Set(['P','DIV','BR','LI','TR','TD','TH','UL','OL','TABLE']);
+const SUSPECT_SKIP_CLASSES = ['sup', 'sub', 'eq-rendered', 'sup-flag'];
+
+function buildSuspectIndex(root) {
+  const chars = [];
+  const map = []; // map[i] = {node, offset} for chars[i], or null for a boundary marker
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.data;
+      for (let i = 0; i < text.length; i++) { chars.push(text[i]); map.push({node, offset: i}); }
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' ||
+        SUSPECT_SKIP_CLASSES.some(c => node.classList && node.classList.contains(c)) ||
+        tag === 'SUP' || tag === 'SUB') {
+      return; // don't descend - never re-flag inside an already-resolved sup/sub/flag
+    }
+    const isBreak = SUSPECT_BREAK_TAGS.has(tag);
+    if (isBreak && chars.length && chars[chars.length - 1] !== '\n') { chars.push('\n'); map.push(null); }
+    node.childNodes.forEach(walk);
+    if (isBreak && chars.length && chars[chars.length - 1] !== '\n') { chars.push('\n'); map.push(null); }
+  }
+  walk(root);
+  return {text: chars.join(''), map};
+}
+
+function flagSuspectedExponents(root) {
+  const {text, map} = buildSuspectIndex(root);
+  const matches = [...text.matchAll(SUSPECT_RE)];
+  // Reverse order: splicing a later match never shifts the (node, offset)
+  // positions an earlier match still needs to use.
+  for (let k = matches.length - 1; k >= 0; k--) {
+    const m = matches[k];
+    const digitStart = m.index + 1;
+    const digitEnd = digitStart + m[2].length; // exclusive
+    const startPos = map[digitStart];
+    const endPos = map[digitEnd - 1];
+    if (!startPos || !endPos) continue; // shouldn't happen - \d never matches the \n boundary marker
+    const range = document.createRange();
+    range.setStart(startPos.node, startPos.offset);
+    range.setEnd(endPos.node, endPos.offset + 1);
+    range.deleteContents();
+    const span = document.createElement('span');
+    span.className = 'sup-flag';
+    span.textContent = m[2];
+    span.title = 'Click = superscript, Shift+click = subscript, Alt+click = leave as-is';
+    range.insertNode(span);
+  }
+}
+
+/* =========================================================================
    5. UI WIRING
    ========================================================================= */
 let currentQuestions = null;
@@ -1440,6 +1531,20 @@ paperEl.addEventListener('input', () => {
 // the caret sits right after a delimiter that completes a "^..." token),
 // and again in bulk on blur to sweep up anything that slipped through
 // (e.g. pasted text, or a token finished right as focus left the paper).
+//
+// The keyup+delimiter path only catches the case where you TYPE the
+// character right after the exponent. It deliberately does NOT catch the
+// much more common edit: selecting an existing digit (e.g. the "2" in a
+// stray "x2") and retyping it as "^2" in place - the text right after it
+// was already there, not freshly typed, so no delimiter keystroke ever
+// fires next to it. A debounced sweep after a short pause in typing
+// catches that case (and pasted text) without requiring the user to click
+// away from the paper first.
+let supSweepTimer = null;
+paperEl.addEventListener('input', () => {
+  clearTimeout(supSweepTimer);
+  supSweepTimer = setTimeout(() => applyManualSuperscripts(paperEl), 600);
+});
 paperEl.addEventListener('keyup', (e) => {
   if (e.key === ' ' || e.key === ',' || e.key === '.' || e.key === ')' ||
       e.key === ']' || e.key === ';' || e.key === ':' || e.key === 'Enter') {
@@ -1447,8 +1552,26 @@ paperEl.addEventListener('keyup', (e) => {
   }
 });
 paperEl.addEventListener('blur', () => {
+  clearTimeout(supSweepTimer);
   applyManualSuperscripts(paperEl);
 }, true);
+
+// Suspected-exponent/subscript flags (see flagSuspectedExponents): resolve
+// with a click rather than a typed shorthand, since these are digits that
+// were already there in the source text, not something being typed fresh.
+paperEl.addEventListener('click', (e) => {
+  const flag = e.target.closest('.sup-flag');
+  if (!flag) return;
+  e.preventDefault();
+  if (e.altKey) {
+    flag.replaceWith(document.createTextNode(flag.textContent));
+  } else {
+    const el = document.createElement(e.shiftKey ? 'sub' : 'sup');
+    el.textContent = flag.textContent;
+    flag.replaceWith(el);
+  }
+  paperEdited = true;
+});
 
 // Manual equation entry - works without any OCR proxy configured. Click any
 // flagged equation crop (or an already-transcribed one, to fix it) and type
@@ -1518,6 +1641,11 @@ function rerender() {
   // rendered text (e.g. typed just before a mode switch, or left over in
   // source text) so it converts even though no keyup/blur fired for it.
   applyManualSuperscripts(paperEl);
+  // Flag any remaining letter-immediately-followed-by-digit text (scoped
+  // to each question body only) as a possible missed superscript/subscript
+  // for a quick click-to-resolve. Runs after the sweep above so anything
+  // already fixed via "^2" shorthand is skipped.
+  paperEl.querySelectorAll('.qbody').forEach(flagSuspectedExponents);
   if (flattenToggle.checked) flattenLineBreaks();
   requestAnimationFrame(() => {
     const pageCount = computeAndShowPageBreaks(mode);
