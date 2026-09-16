@@ -269,6 +269,47 @@
     display: flex; justify-content: space-between; margin-top: 50px;
     font-size: 14px; font-family: var(--mono); color: #444; border-top: 1px solid var(--rule); padding-top: 14px;
   }
+
+  /* ---------- Equation lookup modal ---------- */
+  #eq-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(20,18,14,0.55);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  #eq-modal {
+    background: var(--paper); border-radius: 8px; max-width: 560px; width: 100%;
+    max-height: 90vh; overflow-y: auto; padding: 22px 24px; font-family: var(--mono);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  }
+  #eq-modal h3 { font-family: var(--serif); font-size: 18px; margin: 0 0 4px; }
+  #eq-modal .eq-sub { font-size: 12px; color: #777; margin: 0 0 14px; line-height: 1.5; }
+  #eq-modal .eq-orig-wrap { text-align: center; margin-bottom: 14px; }
+  #eq-modal .eq-orig-wrap img { max-width: 100%; max-height: 90px; border: 1px solid var(--rule); background: #fff; }
+  #eq-paste-zone {
+    border: 2px dashed #c9c0aa; border-radius: 6px; padding: 14px; text-align: center;
+    font-size: 12.5px; color: #6b6a63; cursor: text; min-height: 44px;
+    display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
+  }
+  #eq-paste-zone:focus { outline: 2px solid var(--accent); border-style: solid; }
+  #eq-paste-zone.has-image { display: block; }
+  #eq-paste-zone img { max-width: 100%; max-height: 160px; display: block; margin: 0 auto; }
+  #eq-lookup-links { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  #eq-lookup-links a {
+    font-size: 11.5px; color: var(--accent); text-decoration: none; border: 1px solid var(--rule);
+    border-radius: 4px; padding: 5px 9px; background: #fff;
+  }
+  #eq-lookup-links a:hover { border-color: var(--accent); }
+  #eq-modal textarea {
+    width: 100%; font-family: var(--mono); font-size: 13px; padding: 8px;
+    border: 1px solid var(--rule); border-radius: 4px; resize: vertical; min-height: 60px; margin-bottom: 4px;
+  }
+  #eq-modal .eq-preview { min-height: 30px; padding: 6px 2px; }
+  #eq-modal .eq-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  #eq-modal .eq-actions button {
+    font-family: var(--mono); font-size: 13px; padding: 7px 14px; border-radius: 4px;
+    border: 1px solid var(--rule); background: #fff; cursor: pointer;
+  }
+  #eq-modal .eq-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #eq-modal .eq-actions button.danger { color: #c0392b; }
 </style>
 </head>
 <body>
@@ -323,7 +364,29 @@
 </div>
 
 <div id="paper" class="compressed"></div>
-<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript shortly after you stop typing. Yellow-highlighted digits are suspected missed superscripts/subscripts — click = superscript, Shift+click = subscript, Alt+click = leave as-is. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
+<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript shortly after you stop typing. Yellow-highlighted digits are suspected missed superscripts/subscripts — click = superscript, Shift+click = subscript, Alt+click = leave as-is. Click any image (diagram or equation) to look it up or type its LaTeX by hand.</div>
+
+<div id="eq-modal-overlay">
+  <div id="eq-modal">
+    <h3>Equation LaTeX</h3>
+    <p class="eq-sub">Paste a screenshot below (Ctrl/Cmd+V) to look it up on a free converter site, or just type the LaTeX directly. Leave the text box blank and save to restore the original image.</p>
+    <div class="eq-orig-wrap"><img id="eq-orig-img" alt="original crop"></div>
+    <div id="eq-paste-zone" tabindex="0">Click here, then paste a screenshot (Ctrl/Cmd+V)</div>
+    <div id="eq-lookup-links">
+      <a id="eq-link-mathpix" href="https://snip.mathpix.com/" target="_blank" rel="noopener">Open Mathpix Snip ↗</a>
+      <a id="eq-link-simpletex" href="https://simpletex.cn/" target="_blank" rel="noopener">Open SimpleTex ↗</a>
+      <a id="eq-link-latexconvert" href="https://latexconvert.com/" target="_blank" rel="noopener">Open LatexConvert ↗</a>
+      <a id="eq-link-editor" href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">Open LaTeX editor ↗</a>
+    </div>
+    <textarea id="eq-latex-input" placeholder="\frac{a}{b}  (paste the LaTeX result back here)"></textarea>
+    <div id="eq-preview-live" class="eq-preview"></div>
+    <div class="eq-actions">
+      <button type="button" id="eq-cancel">Cancel</button>
+      <button type="button" id="eq-clear" class="danger">Use original image</button>
+      <button type="button" id="eq-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* =========================================================================
@@ -1573,41 +1636,118 @@ paperEl.addEventListener('click', (e) => {
   paperEdited = true;
 });
 
-// Manual equation entry - works without any OCR proxy configured. Click any
-// flagged equation crop (or an already-transcribed one, to fix it) and type
-// or paste its LaTeX directly.
-paperEl.addEventListener('click', (e) => {
-  const target = e.target.closest('[data-eq-candidate]');
-  if (!target || !target.id) return;
-  e.preventDefault();
-  const current = ocrResults.get(target.id) || '';
-  const input = window.prompt(
-    'LaTeX for this equation (leave blank to show the original image).\n\n' +
-    'Not sure how to write it? Compose it at https://latexeditor.lagrida.com/ ' +
-    'and paste the code here.',
-    current
-  );
-  if (input === null) return; // cancelled
-  const latex = input.trim();
+/* =========================================================================
+   5b. EQUATION LOOKUP MODAL
+   Replaces the old window.prompt-based LaTeX entry. A plain prompt() can
+   only ever collect typed text, so there was no way to paste a screenshot
+   into it. This modal adds a paste target: click into it and paste an
+   image (Ctrl/Cmd+V) straight from the clipboard - e.g. after snipping a
+   region of the original paper, or a symbol from elsewhere. It's shown
+   alongside quick links to a few free image-to-LaTeX sites, since nothing
+   in-browser here can OCR the image itself: paste your screenshot on one
+   of those sites, copy the LaTeX result, and paste it into the text box
+   below to save it against this equation.
+   ========================================================================= */
+const eqModalOverlay = document.getElementById('eq-modal-overlay');
+const eqOrigImg = document.getElementById('eq-orig-img');
+const eqPasteZone = document.getElementById('eq-paste-zone');
+const eqLatexInput = document.getElementById('eq-latex-input');
+const eqPreviewLive = document.getElementById('eq-preview-live');
+const eqCancelBtn = document.getElementById('eq-cancel');
+const eqClearBtn = document.getElementById('eq-clear');
+const eqSaveBtn = document.getElementById('eq-save');
+let eqModalTargetId = null;
+let eqModalTargetIsImg = false;
+let eqPasteZoneDefaultText = eqPasteZone.textContent;
 
-  if (!latex) {
-    if (!ocrResults.has(target.id)) return; // already showing the image, nothing to do
-    if (target.tagName !== 'IMG') {
-      // Reverting a rendered equation back to its image needs a full
-      // rerender, since the original <img> no longer exists in the DOM.
-      if (!confirmDiscardEdits('Reverting this equation to its original image')) return;
-      ocrResults.delete(target.id);
-      rerender();
+function eqUpdateLivePreview() {
+  const latex = eqLatexInput.value.trim();
+  if (!latex || typeof katex === 'undefined') { eqPreviewLive.innerHTML = ''; return; }
+  try {
+    katex.render(latex, eqPreviewLive, {throwOnError: false});
+  } catch (e) {
+    eqPreviewLive.textContent = '(could not render preview)';
+  }
+}
+eqLatexInput.addEventListener('input', eqUpdateLivePreview);
+
+function eqResetPasteZone() {
+  eqPasteZone.innerHTML = '';
+  eqPasteZone.textContent = eqPasteZoneDefaultText;
+  eqPasteZone.classList.remove('has-image');
+}
+
+// Paste handler: only ever used to VIEW a pasted screenshot so it's easy to
+// carry over to one of the lookup links (via the system clipboard, which
+// still holds it) or simply eyeball the symbol while typing its LaTeX. It
+// is never sent anywhere automatically - there's no free, keyless, CORS-
+// enabled OCR endpoint this single static HTML file can call directly.
+eqPasteZone.addEventListener('paste', (e) => {
+  const items = (e.clipboardData || window.clipboardData).items;
+  for (const item of items) {
+    if (item.type.indexOf('image') === 0) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      const url = URL.createObjectURL(blob);
+      eqPasteZone.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = url;
+      eqPasteZone.appendChild(img);
+      eqPasteZone.classList.add('has-image');
       return;
     }
-    ocrResults.delete(target.id);
+  }
+});
+
+function openEqModal(target) {
+  eqModalTargetId = target.id;
+  eqModalTargetIsImg = target.tagName === 'IMG';
+  eqOrigImg.style.display = eqModalTargetIsImg ? '' : 'none';
+  if (eqModalTargetIsImg) eqOrigImg.src = target.src;
+  eqResetPasteZone();
+  eqLatexInput.value = ocrResults.get(target.id) || '';
+  eqUpdateLivePreview();
+  eqModalOverlay.style.display = 'flex';
+  setTimeout(() => eqPasteZone.focus(), 0);
+}
+
+function closeEqModal() {
+  eqModalOverlay.style.display = 'none';
+  eqModalTargetId = null;
+}
+
+eqCancelBtn.addEventListener('click', closeEqModal);
+eqModalOverlay.addEventListener('click', (e) => { if (e.target === eqModalOverlay) closeEqModal(); });
+
+eqClearBtn.addEventListener('click', () => {
+  if (!eqModalTargetId) return;
+  const target = document.getElementById(eqModalTargetId);
+  if (!ocrResults.has(eqModalTargetId)) { closeEqModal(); return; }
+  if (target && target.tagName !== 'IMG') {
+    if (!confirmDiscardEdits('Reverting this equation to its original image')) return;
+    ocrResults.delete(eqModalTargetId);
+    closeEqModal();
+    rerender();
     return;
   }
+  ocrResults.delete(eqModalTargetId);
+  closeEqModal();
+});
 
-  ocrResults.set(target.id, latex);
-  if (target.tagName === 'IMG') {
+eqSaveBtn.addEventListener('click', () => {
+  if (!eqModalTargetId) return;
+  const latex = eqLatexInput.value.trim();
+  const target = document.getElementById(eqModalTargetId);
+  if (!latex) {
+    if (ocrResults.has(eqModalTargetId)) ocrResults.delete(eqModalTargetId);
+    closeEqModal();
+    if (target && target.tagName !== 'IMG') rerender();
+    return;
+  }
+  ocrResults.set(eqModalTargetId, latex);
+  if (target && target.tagName === 'IMG') {
     applyOcrResults();
-  } else if (typeof katex !== 'undefined') {
+  } else if (target && typeof katex !== 'undefined') {
     try {
       target.innerHTML = '';
       katex.render(latex, target, {throwOnError: false});
@@ -1618,6 +1758,17 @@ paperEl.addEventListener('click', (e) => {
     }
   }
   paperEdited = true;
+  closeEqModal();
+});
+
+// Manual equation entry - works without any OCR proxy configured. Click any
+// flagged equation crop (or an already-transcribed one, to fix it) and
+// look it up / type or paste its LaTeX in the modal.
+paperEl.addEventListener('click', (e) => {
+  const target = e.target.closest('[data-eq-candidate]');
+  if (!target || !target.id) return;
+  e.preventDefault();
+  openEqModal(target);
 });
 
 function rerender() {
