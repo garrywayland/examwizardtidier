@@ -282,22 +282,23 @@
   }
   #eq-modal h3 { font-family: var(--serif); font-size: 18px; margin: 0 0 4px; }
   #eq-modal .eq-sub { font-size: 12px; color: #777; margin: 0 0 14px; line-height: 1.5; }
-  #eq-modal .eq-orig-wrap { text-align: center; margin-bottom: 14px; }
-  #eq-modal .eq-orig-wrap img { max-width: 100%; max-height: 90px; border: 1px solid var(--rule); background: #fff; }
-  #eq-paste-zone {
-    border: 2px dashed #c9c0aa; border-radius: 6px; padding: 14px; text-align: center;
-    font-size: 12.5px; color: #6b6a63; cursor: text; min-height: 44px;
-    display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
+  #eq-modal .eq-orig-wrap { text-align: center; margin-bottom: 6px; position: relative; }
+  #eq-modal .eq-orig-wrap img {
+    max-width: 100%; max-height: 110px; border: 1px solid var(--rule); background: #fff;
+    cursor: pointer;
   }
-  #eq-paste-zone:focus { outline: 2px solid var(--accent); border-style: solid; }
-  #eq-paste-zone.has-image { display: block; }
-  #eq-paste-zone img { max-width: 100%; max-height: 160px; display: block; margin: 0 auto; }
-  #eq-lookup-links { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-  #eq-lookup-links a {
-    font-size: 11.5px; color: var(--accent); text-decoration: none; border: 1px solid var(--rule);
-    border-radius: 4px; padding: 5px 9px; background: #fff;
+  #eq-modal .eq-orig-wrap img:hover { outline: 2px solid var(--accent); }
+  #eq-copy-status {
+    font-size: 11.5px; color: #2e7d32; min-height: 16px; margin-bottom: 8px; text-align: center;
   }
-  #eq-lookup-links a:hover { border-color: var(--accent); }
+  #eq-copy-status.error { color: #c0392b; }
+  #eq-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+  #eq-actions-row button, #eq-actions-row a {
+    font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--rule);
+    border-radius: 4px; padding: 6px 10px; background: #fff; cursor: pointer; font-family: var(--mono);
+  }
+  #eq-actions-row a#eq-link-latexconvert { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #eq-actions-row button:hover, #eq-actions-row a:hover { border-color: var(--accent); }
   #eq-modal textarea {
     width: 100%; font-family: var(--mono); font-size: 13px; padding: 8px;
     border: 1px solid var(--rule); border-radius: 4px; resize: vertical; min-height: 60px; margin-bottom: 4px;
@@ -369,14 +370,13 @@
 <div id="eq-modal-overlay">
   <div id="eq-modal">
     <h3>Equation LaTeX</h3>
-    <p class="eq-sub">Paste a screenshot below (Ctrl/Cmd+V) to look it up on a free converter site, or just type the LaTeX directly. Leave the text box blank and save to restore the original image.</p>
-    <div class="eq-orig-wrap"><img id="eq-orig-img" alt="original crop"></div>
-    <div id="eq-paste-zone" tabindex="0">Click here, then paste a screenshot (Ctrl/Cmd+V)</div>
-    <div id="eq-lookup-links">
-      <a id="eq-link-mathpix" href="https://snip.mathpix.com/" target="_blank" rel="noopener">Open Mathpix Snip ↗</a>
-      <a id="eq-link-simpletex" href="https://simpletex.cn/" target="_blank" rel="noopener">Open SimpleTex ↗</a>
+    <p class="eq-sub">Click the image (or "Copy image") to copy it, then open LatexConvert and paste it in there (Ctrl/Cmd+V). Copy the LaTeX result back and paste it into the box below. Leave the box blank and save to restore the original image.</p>
+    <div class="eq-orig-wrap"><img id="eq-orig-img" alt="original crop" title="Click to copy image"></div>
+    <div id="eq-copy-status"></div>
+    <div id="eq-actions-row">
+      <button type="button" id="eq-copy-btn">Copy image</button>
       <a id="eq-link-latexconvert" href="https://latexconvert.com/" target="_blank" rel="noopener">Open LatexConvert ↗</a>
-      <a id="eq-link-editor" href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">Open LaTeX editor ↗</a>
+      <a id="eq-link-editor" href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">Write by hand ↗</a>
     </div>
     <textarea id="eq-latex-input" placeholder="\frac{a}{b}  (paste the LaTeX result back here)"></textarea>
     <div id="eq-preview-live" class="eq-preview"></div>
@@ -1650,7 +1650,8 @@ paperEl.addEventListener('click', (e) => {
    ========================================================================= */
 const eqModalOverlay = document.getElementById('eq-modal-overlay');
 const eqOrigImg = document.getElementById('eq-orig-img');
-const eqPasteZone = document.getElementById('eq-paste-zone');
+const eqCopyStatus = document.getElementById('eq-copy-status');
+const eqCopyBtn = document.getElementById('eq-copy-btn');
 const eqLatexInput = document.getElementById('eq-latex-input');
 const eqPreviewLive = document.getElementById('eq-preview-live');
 const eqCancelBtn = document.getElementById('eq-cancel');
@@ -1658,7 +1659,7 @@ const eqClearBtn = document.getElementById('eq-clear');
 const eqSaveBtn = document.getElementById('eq-save');
 let eqModalTargetId = null;
 let eqModalTargetIsImg = false;
-let eqPasteZoneDefaultText = eqPasteZone.textContent;
+let eqCopyStatusTimer = null;
 
 function eqUpdateLivePreview() {
   const latex = eqLatexInput.value.trim();
@@ -1671,44 +1672,65 @@ function eqUpdateLivePreview() {
 }
 eqLatexInput.addEventListener('input', eqUpdateLivePreview);
 
-function eqResetPasteZone() {
-  eqPasteZone.innerHTML = '';
-  eqPasteZone.textContent = eqPasteZoneDefaultText;
-  eqPasteZone.classList.remove('has-image');
+function eqShowCopyStatus(msg, isError) {
+  clearTimeout(eqCopyStatusTimer);
+  eqCopyStatus.textContent = msg;
+  eqCopyStatus.classList.toggle('error', !!isError);
+  eqCopyStatusTimer = setTimeout(() => { eqCopyStatus.textContent = ''; }, 3500);
 }
 
-// Paste handler: only ever used to VIEW a pasted screenshot so it's easy to
-// carry over to one of the lookup links (via the system clipboard, which
-// still holds it) or simply eyeball the symbol while typing its LaTeX. It
-// is never sent anywhere automatically - there's no free, keyless, CORS-
-// enabled OCR endpoint this single static HTML file can call directly.
-eqPasteZone.addEventListener('paste', (e) => {
-  const items = (e.clipboardData || window.clipboardData).items;
-  for (const item of items) {
-    if (item.type.indexOf('image') === 0) {
-      e.preventDefault();
-      const blob = item.getAsFile();
-      const url = URL.createObjectURL(blob);
-      eqPasteZone.innerHTML = '';
-      const img = document.createElement('img');
-      img.src = url;
-      eqPasteZone.appendChild(img);
-      eqPasteZone.classList.add('has-image');
-      return;
-    }
+// LatexConvert (and similar free converter sites) have no API this static
+// page can call directly - no CORS, no key. The reliable free path is:
+// copy the actual equation crop to the system clipboard as an image, then
+// let the person paste it themselves into whichever converter tab they
+// have open. Most crop sources here are JPEG (RTF \pict blobs); Chrome's
+// Clipboard API only reliably accepts image/png ClipboardItems, so a JPEG
+// blob is redrawn to a canvas and re-encoded as PNG before writing it.
+function blobToPng(blob) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || 1;
+      canvas.height = img.naturalHeight || 1;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('conversion failed')), 'image/png');
+    };
+    img.onerror = () => reject(new Error('could not load image'));
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
+async function copyEqImageToClipboard(src) {
+  if (!navigator.clipboard || !window.ClipboardItem) {
+    eqShowCopyStatus('Clipboard copy isn\'t supported in this browser - right-click the image and copy it instead.', true);
+    return;
   }
-});
+  try {
+    const resp = await fetch(src);
+    let blob = await resp.blob();
+    if (blob.type !== 'image/png') blob = await blobToPng(blob);
+    await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+    eqShowCopyStatus('Copied! Switch to LatexConvert and paste (Ctrl/Cmd+V).');
+  } catch (e) {
+    eqShowCopyStatus('Copy failed - right-click the image and copy it instead.', true);
+  }
+}
+
+eqOrigImg.addEventListener('click', () => { if (eqModalTargetIsImg) copyEqImageToClipboard(eqOrigImg.src); });
+eqCopyBtn.addEventListener('click', () => { if (eqModalTargetIsImg) copyEqImageToClipboard(eqOrigImg.src); });
 
 function openEqModal(target) {
   eqModalTargetId = target.id;
   eqModalTargetIsImg = target.tagName === 'IMG';
   eqOrigImg.style.display = eqModalTargetIsImg ? '' : 'none';
+  eqCopyBtn.style.display = eqModalTargetIsImg ? '' : 'none';
   if (eqModalTargetIsImg) eqOrigImg.src = target.src;
-  eqResetPasteZone();
+  eqCopyStatus.textContent = '';
   eqLatexInput.value = ocrResults.get(target.id) || '';
   eqUpdateLivePreview();
   eqModalOverlay.style.display = 'flex';
-  setTimeout(() => eqPasteZone.focus(), 0);
+  setTimeout(() => eqLatexInput.focus(), 0);
 }
 
 function closeEqModal() {
