@@ -150,6 +150,75 @@
   .sup-flag { background: #fff2b3; outline: 1px dashed #b8952b; outline-offset: 1px; border-radius: 2px; padding: 0 1px; cursor: pointer; }
   .sup-flag:hover { background: #ffe98f; }
 
+  /* ---------- "Review next" step-through ----------
+     A single guided pass over everything the automated import left as a
+     decision for the teacher: suspected exponents/subscripts (adjusting
+     powers) and every equation-candidate image (convert to LaTeX, or keep
+     as an image and pick its size). Wraps the existing sup-flag and
+     equation-image mechanisms rather than replacing them - both are still
+     directly clickable as before; this just walks through them in order
+     so nothing gets missed. */
+  .review-highlight {
+    outline: 3px solid #d99a2b !important; outline-offset: 3px;
+    animation: review-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes review-pulse {
+    0%, 100% { outline-color: #d99a2b; }
+    50% { outline-color: #f0c060; }
+  }
+  #review-flow-bar {
+    display: none; position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 90; background: var(--ink); color: #f4f1ea; border-radius: 8px;
+    padding: 10px 16px 10px 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+    font-family: var(--mono); font-size: 12.5px;
+    flex-direction: column; gap: 8px; max-width: 90vw;
+  }
+  #review-flow-bar.open { display: flex; }
+  #rf-progress { opacity: 0.75; }
+  #rf-content { max-width: 520px; }
+  #rf-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  #rf-actions button {
+    font-family: var(--mono); font-size: 12px; padding: 6px 10px; border-radius: 4px;
+    border: 1px solid #504a3d; background: #2a2a26; color: #f4f1ea; cursor: pointer;
+  }
+  #rf-actions button:hover { border-color: var(--accent); }
+  #rf-actions button.primary { background: var(--accent); border-color: var(--accent); }
+  #rf-close {
+    position: absolute; top: 6px; right: 8px; background: none; border: none;
+    color: #9a9488; font-size: 13px; cursor: pointer; padding: 2px 6px;
+  }
+
+  /* ---------- Equation entry modal ---------- */
+  #eq-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(20,18,12,0.45);
+    z-index: 100; align-items: center; justify-content: center;
+  }
+  #eq-modal-overlay.open { display: flex; }
+  #eq-modal {
+    background: var(--paper); border-radius: 8px; padding: 20px 24px;
+    width: 480px; max-width: 92vw; max-height: 86vh; overflow-y: auto;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3); font-family: var(--mono);
+  }
+  #eq-modal h3 { font-family: var(--serif); font-size: 17px; margin: 0 0 12px; }
+  #eq-modal .eq-preview { text-align: center; margin-bottom: 12px; }
+  #eq-modal .eq-preview img { max-width: 100%; max-height: 140px; border: 1px solid var(--rule); background: #fff; }
+  #eq-modal textarea {
+    width: 100%; min-height: 70px; font-family: var(--mono); font-size: 13px;
+    padding: 8px; border: 1px solid var(--rule); border-radius: 4px; resize: vertical;
+    box-sizing: border-box;
+  }
+  #eq-modal .eq-render-preview { margin: 8px 0; min-height: 20px; }
+  #eq-modal .eq-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  #eq-modal button {
+    font-family: var(--mono); font-size: 12.5px; padding: 7px 12px; border-radius: 4px;
+    border: 1px solid var(--rule); background: #fff; cursor: pointer;
+  }
+  #eq-modal button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #eq-modal button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #eq-modal .eq-status { font-size: 11.5px; color: #777; margin-top: 6px; min-height: 14px; }
+  #eq-modal .eq-proxy-row { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--rule); font-size: 11.5px; color: #777; }
+  #eq-modal .eq-proxy-row input { width: 100%; font-family: var(--mono); font-size: 11.5px; padding: 4px; margin-top: 4px; box-sizing: border-box; }
+
   /* ---------- Print ---------- */
   @media print {
     #controls, #sizing-panel, #edit-hint, #sup-banner { display: none !important; }
@@ -270,47 +339,63 @@
     font-size: 14px; font-family: var(--mono); color: #444; border-top: 1px solid var(--rule); padding-top: 14px;
   }
 
-  /* ---------- Equation lookup modal ---------- */
-  #eq-modal-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(20,18,14,0.55);
-    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  /* ---------- Lined writing page ----------
+     A blank full page of ruled lines (extra answer/working space, common
+     on A-level papers). Always its own page regardless of layout mode.
+     Each rule is a real element (.write-line), not a CSS background
+     gradient - html2canvas (what the PDF export uses) renders repeating
+     background gradients unreliably, especially combined with page-break
+     properties on an otherwise content-less box, so real stacked divs are
+     the dependable choice; they also print correctly with window.print().
+     contenteditable is off (nothing to type into here; it's blank space
+     for the student on the printed page, not for the teacher to edit). */
+  .lined-page {
+    page-break-before: always; break-before: page;
+    page-break-after: always; break-after: page;
+    break-inside: avoid; page-break-inside: avoid;
+    position: relative; box-sizing: border-box;
+    min-height: 281mm; padding: 16mm 4mm 0;
   }
-  #eq-modal {
-    background: var(--paper); border-radius: 8px; max-width: 560px; width: 100%;
-    max-height: 90vh; overflow-y: auto; padding: 22px 24px; font-family: var(--mono);
-    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  .lined-page:first-child { page-break-before: auto; break-before: auto; }
+  .lined-page:last-child { page-break-after: auto; break-after: auto; }
+  .lined-page .lp-label {
+    font-family: var(--serif); font-style: italic; font-size: 13px;
+    color: #8a8272; text-align: center; margin: 0 0 10mm;
   }
-  #eq-modal h3 { font-family: var(--serif); font-size: 18px; margin: 0 0 4px; }
-  #eq-modal .eq-sub { font-size: 12px; color: #777; margin: 0 0 14px; line-height: 1.5; }
-  #eq-modal .eq-orig-wrap { text-align: center; margin-bottom: 6px; position: relative; }
-  #eq-modal .eq-orig-wrap img {
-    max-width: 100%; max-height: 110px; border: 1px solid var(--rule); background: #fff;
-    cursor: pointer;
+  .write-line {
+    height: 8mm; border-bottom: 1px solid var(--rule);
   }
-  #eq-modal .eq-orig-wrap img:hover { outline: 2px solid var(--accent); }
-  #eq-copy-status {
-    font-size: 11.5px; color: #2e7d32; min-height: 16px; margin-bottom: 8px; text-align: center;
+  .lined-page .lp-remove {
+    position: absolute; top: 4mm; right: 4mm; font-family: var(--mono); font-size: 10.5px;
+    color: #c0392b; background: #fff; border: 1px solid var(--rule); border-radius: 3px;
+    padding: 3px 8px; cursor: pointer;
   }
-  #eq-copy-status.error { color: #c0392b; }
-  #eq-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
-  #eq-actions-row button, #eq-actions-row a {
-    font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--rule);
-    border-radius: 4px; padding: 6px 10px; background: #fff; cursor: pointer; font-family: var(--mono);
+  @media print { .lined-page .lp-remove { display: none !important; } }
+
+  /* ---------- Writing lines inside a question ----------
+     A smaller version of the same ruled lines (see .write-line above),
+     for extra working/writing space within a single question rather than
+     a whole separate page - e.g. for a stretch question that needs more
+     room than the auto-sized answer-space gives it. Inserted via a small
+     "+ Add lines" handle at the bottom of each question, same pattern as
+     the "+ page break" handle between questions. */
+  .write-lines-block {
+    position: relative; margin: 6px 0 2px; padding-top: 5mm;
+    break-inside: avoid; page-break-inside: avoid;
   }
-  #eq-actions-row a#eq-link-latexconvert { background: var(--accent); border-color: var(--accent); color: #fff; }
-  #eq-actions-row button:hover, #eq-actions-row a:hover { border-color: var(--accent); }
-  #eq-modal textarea {
-    width: 100%; font-family: var(--mono); font-size: 13px; padding: 8px;
-    border: 1px solid var(--rule); border-radius: 4px; resize: vertical; min-height: 60px; margin-bottom: 4px;
+  .write-lines-block .wl-remove {
+    position: absolute; top: 0; right: 0; font-family: var(--mono); font-size: 10px;
+    color: #c0392b; background: #fff; border: 1px solid var(--rule); border-radius: 3px;
+    padding: 1px 6px; cursor: pointer;
   }
-  #eq-modal .eq-preview { min-height: 30px; padding: 6px 2px; }
-  #eq-modal .eq-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-  #eq-modal .eq-actions button {
-    font-family: var(--mono); font-size: 13px; padding: 7px 14px; border-radius: 4px;
-    border: 1px solid var(--rule); background: #fff; cursor: pointer;
+  @media print { .write-lines-block .wl-remove { display: none !important; } }
+  .wl-insert-handle { display: flex; justify-content: center; margin: 4px 0; }
+  .wl-insert-handle button {
+    font-family: var(--mono); font-size: 10.5px; color: #9a8f78; background: none;
+    border: 1px dashed #b8a888; border-radius: 3px; padding: 2px 9px; cursor: pointer;
   }
-  #eq-modal .eq-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  #eq-modal .eq-actions button.danger { color: #c0392b; }
+  .wl-insert-handle button:hover { color: var(--accent); border-color: var(--accent); }
+  @media print { .wl-insert-handle { display: none !important; } }
 </style>
 </head>
 <body>
@@ -329,6 +414,7 @@
   </label>
   <button id="reviewBtn" disabled>Review diagram sizes</button>
   <button id="ocrBtn" disabled style="display:none;">Transcribe equations (OCR)</button>
+  <button id="reviewNextBtn" disabled>Review next ▸</button>
   <label><input type="checkbox" id="coverToggle"> Cover page</label>
   <label><input type="checkbox" id="flattenToggle"> One line per section</label>
   <label>Default wrap
@@ -339,6 +425,7 @@
     </select>
   </label>
   <label><input type="checkbox" id="totalBottomToggle"> Total at bottom of page (exam mode)</label>
+  <button id="addLinedPageBtn" disabled>+ Add writing page</button>
   <span class="spacer"></span>
   <span id="status">Upload an ExamWizard (Edexcel) .doc file to begin.</span>
   <button id="printBtn" disabled>Print / Save as PDF</button>
@@ -364,29 +451,35 @@
   <button id="closeSizing" style="margin-top:14px;font-family:var(--mono);padding:8px 16px;">Done</button>
 </div>
 
-<div id="paper" class="compressed"></div>
-<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript shortly after you stop typing. Yellow-highlighted digits are suspected missed superscripts/subscripts — click = superscript, Shift+click = subscript, Alt+click = leave as-is. Click any image (diagram or equation) to look it up or type its LaTeX by hand.</div>
-
 <div id="eq-modal-overlay">
   <div id="eq-modal">
-    <h3>Equation LaTeX</h3>
-    <p class="eq-sub">Click the image (or "Copy image") to copy it, then open LatexConvert and paste it in there (Ctrl/Cmd+V). Copy the LaTeX result back and paste it into the box below. Leave the box blank and save to restore the original image.</p>
-    <div class="eq-orig-wrap"><img id="eq-orig-img" alt="original crop" title="Click to copy image"></div>
-    <div id="eq-copy-status"></div>
-    <div id="eq-actions-row">
-      <button type="button" id="eq-copy-btn">Copy image</button>
-      <a id="eq-link-latexconvert" href="https://latexconvert.com/" target="_blank" rel="noopener">Open LatexConvert ↗</a>
-      <a id="eq-link-editor" href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">Write by hand ↗</a>
+    <h3>Equation</h3>
+    <div class="eq-preview" id="eq-modal-img-wrap"></div>
+    <div class="eq-status" id="eq-modal-status"></div>
+    <textarea id="eq-modal-input" placeholder="Type LaTeX here, e.g. \frac{a}{b}"></textarea>
+    <div class="eq-render-preview" id="eq-modal-render"></div>
+    <div class="eq-row">
+      <button id="eq-modal-auto" type="button">Try automatic read</button>
+      <button id="eq-modal-apply" type="button" class="primary">Use this</button>
+      <button id="eq-modal-original" type="button">Use original image</button>
+      <button id="eq-modal-cancel" type="button">Cancel</button>
     </div>
-    <textarea id="eq-latex-input" placeholder="\frac{a}{b}  (paste the LaTeX result back here)"></textarea>
-    <div id="eq-preview-live" class="eq-preview"></div>
-    <div class="eq-actions">
-      <button type="button" id="eq-cancel">Cancel</button>
-      <button type="button" id="eq-clear" class="danger">Use original image</button>
-      <button type="button" id="eq-save" class="primary">Save</button>
+    <div class="eq-proxy-row">
+      OCR proxy URL (optional — leave blank to only type LaTeX by hand)
+      <input type="text" id="eq-proxy-url-input" placeholder="https://your-proxy-endpoint">
     </div>
   </div>
 </div>
+
+<div id="review-flow-bar">
+  <button id="rf-close" type="button" title="Close">✕</button>
+  <div id="rf-progress"></div>
+  <div id="rf-content"></div>
+  <div id="rf-actions"></div>
+</div>
+
+<div id="paper" class="compressed"></div>
+<div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript shortly after you stop typing. Yellow-highlighted digits are suspected missed superscripts/subscripts — click = superscript, Shift+click = subscript, Alt+click = leave as-is. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
 
 <script>
 /* =========================================================================
@@ -1070,14 +1163,20 @@ function coverPageHTML(title, totalMarks) {
 function computeAndShowPageBreaks(mode) {
   paperEl.querySelectorAll('.page-break-line').forEach(el => el.remove());
   const blocks = Array.from(paperEl.children).filter(el =>
-    el.classList.contains('question') || el.classList.contains('coverpage'));
+    el.classList.contains('question') || el.classList.contains('coverpage') || el.classList.contains('lined-page'));
   if (!blocks.length) return 0;
 
   blocks.forEach((b, i) => {
-    const afterCover = i > 0 && blocks[i - 1].classList.contains('coverpage');
+    const prev = i > 0 ? blocks[i - 1] : null;
+    const afterCover = !!prev && prev.classList.contains('coverpage');
+    const afterLinedPage = !!prev && prev.classList.contains('lined-page');
+    const isLinedPage = b.classList.contains('lined-page');
     const manualBreakBefore = i > 0 && b.previousElementSibling &&
       b.previousElementSibling.classList.contains('manual-break');
-    const forced = i > 0 && (mode === 'exam' || afterCover || manualBreakBefore);
+    // A lined writing page always starts a fresh page, and always pushes
+    // whatever follows it onto a fresh page too (its own CSS forces both,
+    // in every layout mode) - the preview here just mirrors that.
+    const forced = i > 0 && (mode === 'exam' || afterCover || afterLinedPage || isLinedPage || manualBreakBefore);
 
     if (forced) {
       if (!manualBreakBefore) {
@@ -1142,6 +1241,57 @@ function refreshPagination() {
   resetManualBreakSizing();
   computeAndShowPageBreaks(modeSelect.value);
   addManualBreakHandles();
+  addWriteLinesHandles();
+}
+
+/* =========================================================================
+   4d-iii. WRITING LINES WITHIN A QUESTION
+   A "+ Add lines" handle sits at the bottom of every question (both layout
+   modes - unlike the "+ page break" handle, this isn't compressed-only).
+   Clicking it inserts a block of ruled lines (same .write-line styling as
+   the full lined-page) just above that handle, inside the question's own
+   .qbody - so it lands after the question's content/parts and before its
+   [Total: N marks] line, growing the question rather than replacing its
+   auto-sized answer-space. Clicking again stacks another block below the
+   first. Like manual page breaks, these are live DOM-only additions wiped
+   by a full rerender() - insertWriteLinesBlock() sets paperEdited so
+   confirmDiscardEdits() warns before that happens.
+   ========================================================================= */
+const WRITE_LINES_BLOCK_COUNT = 6;
+
+function insertWriteLinesBlock(qbody, handle) {
+  const block = document.createElement('div');
+  block.className = 'write-lines-block';
+  block.setAttribute('contenteditable', 'false');
+  const lines = '<div class="write-line"></div>'.repeat(WRITE_LINES_BLOCK_COUNT);
+  block.innerHTML = `<button type="button" class="wl-remove" title="Remove these lines">✕</button>${lines}`;
+  block.querySelector('.wl-remove').addEventListener('click', (e) => {
+    e.preventDefault();
+    block.remove();
+    paperEdited = true;
+  });
+  qbody.insertBefore(block, handle);
+  paperEdited = true;
+}
+
+function addWriteLinesHandles() {
+  paperEl.querySelectorAll('.question > .qbody').forEach(qbody => {
+    if (qbody.querySelector(':scope > .wl-insert-handle')) return; // already has one
+    const handle = document.createElement('div');
+    handle.className = 'wl-insert-handle';
+    handle.setAttribute('contenteditable', 'false');
+    handle.innerHTML = `<button type="button">+ Add lines</button>`;
+    handle.querySelector('button').addEventListener('click', (e) => {
+      e.preventDefault();
+      insertWriteLinesBlock(qbody, handle);
+    });
+    // Keep the handle (and anything inserted via it) above the question's
+    // [Total: N marks] line rather than after it - qtotal.insertBefore(x,
+    // null) is just appendChild, so this also works for a question with
+    // no qtotal at all.
+    const qtotal = qbody.querySelector(':scope > .qtotal');
+    qbody.insertBefore(handle, qtotal || null);
+  });
 }
 
 function insertManualBreak(afterQuestionEl) {
@@ -1159,6 +1309,41 @@ function insertManualBreak(afterQuestionEl) {
   if (existingHandle && existingHandle.classList.contains('mb-insert-handle')) existingHandle.remove();
   afterQuestionEl.parentNode.insertBefore(marker, afterQuestionEl.nextSibling);
   paperEdited = true;
+  refreshPagination();
+}
+
+/* =========================================================================
+   4d-iii. LINED WRITING PAGE
+   A blank full page of ruled lines (extra answer/working space), appended
+   to the end of the paper. Always its own page (forced by .lined-page's
+   own page-break-before/after in CSS), in either layout mode, so it isn't
+   wired into the page-break-preview "forced" logic the way exam mode or a
+   manual break is - it's unconditional. Not part of currentQuestions (it's
+   not test content), so it survives exactly as long as the live DOM does:
+   a rerender() (changing mode, toggling the cover page, etc.) discards it
+   the same way it discards any other in-place edit - confirmDiscardEdits()
+   already warns before that happens.
+   ========================================================================= */
+const LINED_PAGE_LINE_COUNT = 30; // 30 x 8mm + 16mm top padding + ~10mm label ≈ 281mm page height
+
+function addLinedPage() {
+  const page = document.createElement('div');
+  page.className = 'lined-page';
+  page.setAttribute('contenteditable', 'false');
+  const lines = '<div class="write-line"></div>'.repeat(LINED_PAGE_LINE_COUNT);
+  page.innerHTML = `
+    <div class="lp-label">Additional writing space</div>
+    <button type="button" class="lp-remove">✕ Remove page</button>
+    ${lines}`;
+  page.querySelector('.lp-remove').addEventListener('click', (e) => {
+    e.preventDefault();
+    page.remove();
+    paperEdited = true;
+    refreshPagination();
+  });
+  paperEl.appendChild(page);
+  paperEdited = true;
+  page.scrollIntoView({behavior: 'smooth', block: 'start'});
   refreshPagination();
 }
 
@@ -1465,18 +1650,37 @@ let currentFormat = null;
 let reviewImgKeys = []; // populated when the sizing panel opens for ExamBuilder: select-index -> img src
 const ocrResults = new Map(); // img id -> LaTeX string, survives re-renders
 
-// ---- Gemini proxy config -------------------------------------------------
-// Point this at the same Apps Script Web App URL your other tools (seating
-// plan generator, PDF stripper) already use to call Gemini. The fetch body
-// below is a guess at a common shape - if your proxy expects something
-// different, this is the only function that needs changing.
-const GEMINI_PROXY_URL = ''; // <-- paste your Apps Script Web App URL here
+// ---- OCR proxy config ------------------------------------------------
+// The proxy URL is a UI setting saved to localStorage (see the "OCR proxy
+// URL" field in the equation modal), not baked into the page - so the
+// backend (Gemini, pix2tex, anything else that speaks this contract) can
+// be swapped without editing/redeploying this file. Contract: POST
+// {image: <base64>, mimeType: <string>} -> JSON with a `text`, `latex` or
+// `result` field containing raw LaTeX (no prose, no code fences). Check
+// your chosen backend's actual request/response shape before wiring it up
+// here - this is a reasonable default guess, not a confirmed schema.
+function getProxyUrl() { return localStorage.getItem('eqProxyUrl') || ''; }
+function setProxyUrl(url) { localStorage.setItem('eqProxyUrl', url); }
 
-async function transcribeImageToLatex(dataUrl) {
-  if (!GEMINI_PROXY_URL) throw new Error('No GEMINI_PROXY_URL configured');
-  const [, mimeType, base64] = dataUrl.match(/^data:([^;]+);base64,(.+)$/) || [];
-  if (!base64) throw new Error('Not a base64 data URL');
-  const resp = await fetch(GEMINI_PROXY_URL, {
+async function transcribeImageToLatex(imgSrc) {
+  const proxyUrl = getProxyUrl();
+  if (!proxyUrl) throw new Error('No OCR proxy URL configured');
+  let mimeType, base64;
+  const dataMatch = imgSrc.match(/^data:([^;]+);base64,(.+)$/);
+  if (dataMatch) {
+    [, mimeType, base64] = dataMatch;
+  } else {
+    // blob: URLs (RTF-path images) need fetching first to get base64 bytes.
+    const blob = await (await fetch(imgSrc)).blob();
+    mimeType = blob.type || 'image/png';
+    base64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+  }
+  const resp = await fetch(proxyUrl, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1582,6 +1786,7 @@ const fileInput = document.getElementById('fileInput');
 const modeSelect = document.getElementById('modeSelect');
 const reviewBtn = document.getElementById('reviewBtn');
 const ocrBtn = document.getElementById('ocrBtn');
+const reviewNextBtn = document.getElementById('reviewNextBtn');
 const printBtn = document.getElementById('printBtn');
 const pdfBtn = document.getElementById('pdfBtn');
 const texBtn = document.getElementById('texBtn');
@@ -1589,6 +1794,8 @@ const coverToggle = document.getElementById('coverToggle');
 const flattenToggle = document.getElementById('flattenToggle');
 const defaultWrapSelect = document.getElementById('defaultWrapSelect');
 const totalBottomToggle = document.getElementById('totalBottomToggle');
+const addLinedPageBtn = document.getElementById('addLinedPageBtn');
+addLinedPageBtn.addEventListener('click', addLinedPage);
 let defaultImgAlign = 'none'; // fallback wrap direction for any image without its own per-image override
 const statusEl = document.getElementById('status');
 const paperEl = document.getElementById('paper');
@@ -1646,176 +1853,253 @@ paperEl.addEventListener('blur', () => {
 // Suspected-exponent/subscript flags (see flagSuspectedExponents): resolve
 // with a click rather than a typed shorthand, since these are digits that
 // were already there in the source text, not something being typed fresh.
-paperEl.addEventListener('click', (e) => {
-  const flag = e.target.closest('.sup-flag');
-  if (!flag) return;
-  e.preventDefault();
-  if (e.altKey) {
+// Factored out so the "Review next" step-through (below) can resolve a
+// flag the same way a direct click does, instead of duplicating the logic.
+function resolveSupFlag(flag, mode) { // mode: 'sup' | 'sub' | 'text'
+  if (mode === 'text') {
     flag.replaceWith(document.createTextNode(flag.textContent));
   } else {
-    const el = document.createElement(e.shiftKey ? 'sub' : 'sup');
+    const el = document.createElement(mode);
     el.textContent = flag.textContent;
     flag.replaceWith(el);
   }
   paperEdited = true;
-});
-
-/* =========================================================================
-   5b. EQUATION LOOKUP MODAL
-   Replaces the old window.prompt-based LaTeX entry. A plain prompt() can
-   only ever collect typed text, so there was no way to paste a screenshot
-   into it. This modal adds a paste target: click into it and paste an
-   image (Ctrl/Cmd+V) straight from the clipboard - e.g. after snipping a
-   region of the original paper, or a symbol from elsewhere. It's shown
-   alongside quick links to a few free image-to-LaTeX sites, since nothing
-   in-browser here can OCR the image itself: paste your screenshot on one
-   of those sites, copy the LaTeX result, and paste it into the text box
-   below to save it against this equation.
-   ========================================================================= */
-const eqModalOverlay = document.getElementById('eq-modal-overlay');
-const eqOrigImg = document.getElementById('eq-orig-img');
-const eqCopyStatus = document.getElementById('eq-copy-status');
-const eqCopyBtn = document.getElementById('eq-copy-btn');
-const eqLatexInput = document.getElementById('eq-latex-input');
-const eqPreviewLive = document.getElementById('eq-preview-live');
-const eqCancelBtn = document.getElementById('eq-cancel');
-const eqClearBtn = document.getElementById('eq-clear');
-const eqSaveBtn = document.getElementById('eq-save');
-let eqModalTargetId = null;
-let eqModalTargetIsImg = false;
-let eqCopyStatusTimer = null;
-
-function eqUpdateLivePreview() {
-  const latex = eqLatexInput.value.trim();
-  if (!latex || typeof katex === 'undefined') { eqPreviewLive.innerHTML = ''; return; }
-  try {
-    katex.render(latex, eqPreviewLive, {throwOnError: false});
-  } catch (e) {
-    eqPreviewLive.textContent = '(could not render preview)';
-  }
 }
-eqLatexInput.addEventListener('input', eqUpdateLivePreview);
-
-function eqShowCopyStatus(msg, isError) {
-  clearTimeout(eqCopyStatusTimer);
-  eqCopyStatus.textContent = msg;
-  eqCopyStatus.classList.toggle('error', !!isError);
-  eqCopyStatusTimer = setTimeout(() => { eqCopyStatus.textContent = ''; }, 3500);
-}
-
-// LatexConvert (and similar free converter sites) have no API this static
-// page can call directly - no CORS, no key. The reliable free path is:
-// copy the actual equation crop to the system clipboard as an image, then
-// let the person paste it themselves into whichever converter tab they
-// have open. Most crop sources here are JPEG (RTF \pict blobs); Chrome's
-// Clipboard API only reliably accepts image/png ClipboardItems, so a JPEG
-// blob is redrawn to a canvas and re-encoded as PNG before writing it.
-function blobToPng(blob) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || 1;
-      canvas.height = img.naturalHeight || 1;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      canvas.toBlob(b => b ? resolve(b) : reject(new Error('conversion failed')), 'image/png');
-    };
-    img.onerror = () => reject(new Error('could not load image'));
-    img.src = URL.createObjectURL(blob);
-  });
-}
-
-async function copyEqImageToClipboard(src) {
-  if (!navigator.clipboard || !window.ClipboardItem) {
-    eqShowCopyStatus('Clipboard copy isn\'t supported in this browser - right-click the image and copy it instead.', true);
-    return;
-  }
-  try {
-    const resp = await fetch(src);
-    let blob = await resp.blob();
-    if (blob.type !== 'image/png') blob = await blobToPng(blob);
-    await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-    eqShowCopyStatus('Copied! Switch to LatexConvert and paste (Ctrl/Cmd+V).');
-  } catch (e) {
-    eqShowCopyStatus('Copy failed - right-click the image and copy it instead.', true);
-  }
-}
-
-eqOrigImg.addEventListener('click', () => { if (eqModalTargetIsImg) copyEqImageToClipboard(eqOrigImg.src); });
-eqCopyBtn.addEventListener('click', () => { if (eqModalTargetIsImg) copyEqImageToClipboard(eqOrigImg.src); });
-
-function openEqModal(target) {
-  eqModalTargetId = target.id;
-  eqModalTargetIsImg = target.tagName === 'IMG';
-  eqOrigImg.style.display = eqModalTargetIsImg ? '' : 'none';
-  eqCopyBtn.style.display = eqModalTargetIsImg ? '' : 'none';
-  if (eqModalTargetIsImg) eqOrigImg.src = target.src;
-  eqCopyStatus.textContent = '';
-  eqLatexInput.value = ocrResults.get(target.id) || '';
-  eqUpdateLivePreview();
-  eqModalOverlay.style.display = 'flex';
-  setTimeout(() => eqLatexInput.focus(), 0);
-}
-
-function closeEqModal() {
-  eqModalOverlay.style.display = 'none';
-  eqModalTargetId = null;
-}
-
-eqCancelBtn.addEventListener('click', closeEqModal);
-eqModalOverlay.addEventListener('click', (e) => { if (e.target === eqModalOverlay) closeEqModal(); });
-
-eqClearBtn.addEventListener('click', () => {
-  if (!eqModalTargetId) return;
-  const target = document.getElementById(eqModalTargetId);
-  if (!ocrResults.has(eqModalTargetId)) { closeEqModal(); return; }
-  if (target && target.tagName !== 'IMG') {
-    if (!confirmDiscardEdits('Reverting this equation to its original image')) return;
-    ocrResults.delete(eqModalTargetId);
-    closeEqModal();
-    rerender();
-    return;
-  }
-  ocrResults.delete(eqModalTargetId);
-  closeEqModal();
-});
-
-eqSaveBtn.addEventListener('click', () => {
-  if (!eqModalTargetId) return;
-  const latex = eqLatexInput.value.trim();
-  const target = document.getElementById(eqModalTargetId);
-  if (!latex) {
-    if (ocrResults.has(eqModalTargetId)) ocrResults.delete(eqModalTargetId);
-    closeEqModal();
-    if (target && target.tagName !== 'IMG') rerender();
-    return;
-  }
-  ocrResults.set(eqModalTargetId, latex);
-  if (target && target.tagName === 'IMG') {
-    applyOcrResults();
-  } else if (target && typeof katex !== 'undefined') {
-    try {
-      target.innerHTML = '';
-      katex.render(latex, target, {throwOnError: false});
-      target.classList.remove('eq-failed');
-    } catch (err) {
-      target.classList.add('eq-failed');
-      target.title = 'Render failed: ' + err.message;
-    }
-  }
-  paperEdited = true;
-  closeEqModal();
+paperEl.addEventListener('click', (e) => {
+  const flag = e.target.closest('.sup-flag');
+  if (!flag) return;
+  e.preventDefault();
+  resolveSupFlag(flag, e.altKey ? 'text' : (e.shiftKey ? 'sub' : 'sup'));
 });
 
 // Manual equation entry - works without any OCR proxy configured. Click any
-// flagged equation crop (or an already-transcribed one, to fix it) and
-// look it up / type or paste its LaTeX in the modal.
+// flagged equation crop (or an already-transcribed one, to fix it) to open
+// the equation modal: type/paste LaTeX by hand, or - if a proxy URL is
+// set - try an automatic read first and fix whatever it gets wrong before
+// committing. Nothing from "Try automatic read" is ever applied without
+// going through "Use this" first.
 paperEl.addEventListener('click', (e) => {
   const target = e.target.closest('[data-eq-candidate]');
   if (!target || !target.id) return;
   e.preventDefault();
   openEqModal(target);
 });
+
+const eqModalOverlay = document.getElementById('eq-modal-overlay');
+const eqModalImgWrap = document.getElementById('eq-modal-img-wrap');
+const eqModalInput = document.getElementById('eq-modal-input');
+const eqModalRender = document.getElementById('eq-modal-render');
+const eqModalStatus = document.getElementById('eq-modal-status');
+const eqModalAuto = document.getElementById('eq-modal-auto');
+const eqModalApply = document.getElementById('eq-modal-apply');
+const eqModalOriginal = document.getElementById('eq-modal-original');
+const eqModalCancel = document.getElementById('eq-modal-cancel');
+const eqProxyUrlInput = document.getElementById('eq-proxy-url-input');
+eqProxyUrlInput.value = getProxyUrl();
+eqProxyUrlInput.addEventListener('change', () => setProxyUrl(eqProxyUrlInput.value.trim()));
+
+let eqModalTarget = null;
+
+function openEqModal(target) {
+  eqModalTarget = target;
+  eqModalImgWrap.innerHTML = target.tagName === 'IMG' ? `<img src="${target.src}">` : '';
+  eqModalInput.value = ocrResults.get(target.id) || '';
+  eqModalStatus.textContent = '';
+  eqModalAuto.disabled = target.tagName !== 'IMG' || !getProxyUrl();
+  eqModalAuto.title = !getProxyUrl() ? 'Set an OCR proxy URL below first' : '';
+  renderEqPreview();
+  eqModalOverlay.classList.add('open');
+  eqModalInput.focus();
+}
+function closeEqModal() { eqModalOverlay.classList.remove('open'); eqModalTarget = null; }
+function renderEqPreview() {
+  const latex = eqModalInput.value.trim();
+  if (!latex || typeof katex === 'undefined') { eqModalRender.innerHTML = ''; return; }
+  try { katex.render(latex, eqModalRender, {throwOnError: false}); }
+  catch (e) { eqModalRender.textContent = '(preview failed)'; }
+}
+eqModalInput.addEventListener('input', renderEqPreview);
+
+eqModalAuto.addEventListener('click', async () => {
+  if (!eqModalTarget || eqModalTarget.tagName !== 'IMG') return;
+  eqModalAuto.disabled = true;
+  eqModalStatus.textContent = 'Reading…';
+  try {
+    eqModalInput.value = await transcribeImageToLatex(eqModalTarget.src);
+    renderEqPreview();
+    eqModalStatus.textContent = 'Check it over, then "Use this".';
+  } catch (e) {
+    eqModalStatus.textContent = 'Automatic read failed: ' + e.message;
+  }
+  eqModalAuto.disabled = false;
+});
+
+eqModalApply.addEventListener('click', () => {
+  if (!eqModalTarget) return;
+  const latex = eqModalInput.value.trim();
+  if (!latex) { eqModalStatus.textContent = 'Type or read a LaTeX expression first.'; return; }
+  ocrResults.set(eqModalTarget.id, latex);
+  if (eqModalTarget.tagName === 'IMG') {
+    applyOcrResults();
+  } else if (typeof katex !== 'undefined') {
+    try {
+      eqModalTarget.innerHTML = '';
+      katex.render(latex, eqModalTarget, {throwOnError: false});
+      eqModalTarget.classList.remove('eq-failed');
+    } catch (err) {
+      eqModalTarget.classList.add('eq-failed');
+      eqModalTarget.title = 'Render failed: ' + err.message;
+    }
+  }
+  paperEdited = true;
+  closeEqModal();
+});
+
+eqModalOriginal.addEventListener('click', () => {
+  if (!eqModalTarget) return;
+  if (!ocrResults.has(eqModalTarget.id)) { closeEqModal(); return; }
+  if (eqModalTarget.tagName !== 'IMG') {
+    // Reverting a rendered equation back to its image needs a full
+    // rerender, since the original <img> no longer exists in the DOM.
+    if (!confirmDiscardEdits('Reverting this equation to its original image')) return;
+    ocrResults.delete(eqModalTarget.id);
+    closeEqModal();
+    rerender();
+    return;
+  }
+  ocrResults.delete(eqModalTarget.id);
+  closeEqModal();
+});
+
+eqModalCancel.addEventListener('click', closeEqModal);
+eqModalOverlay.addEventListener('click', (e) => { if (e.target === eqModalOverlay) closeEqModal(); });
+
+/* =========================================================================
+   5c. "REVIEW NEXT" STEP-THROUGH
+   A single guided pass over everything the import left as an open decision
+   for the teacher, so there's no need to hunt the paper for yellow
+   highlights or click through equation-shaped images one at a time:
+   adjusting powers/subscripts (the existing sup-flag mechanism) and, for
+   every equation-candidate image, deciding whether to convert it to LaTeX
+   or keep it as an image and pick a size. This wraps the existing
+   sup-flag/eq-modal/size machinery rather than replacing it - everything
+   here still also works by direct click on the paper, same as before;
+   this just walks through the open items in document order.
+   ========================================================================= */
+let reviewSkipped = new WeakSet(); // items explicitly "skipped" this render pass
+const keptAsImage = new Map(); // img key (data-url or src) -> true; persists across rerenders like currentImgScale/currentImgAlign
+
+const reviewFlowBar = document.getElementById('review-flow-bar');
+const rfProgress = document.getElementById('rf-progress');
+const rfContent = document.getElementById('rf-content');
+const rfActions = document.getElementById('rf-actions');
+const rfClose = document.getElementById('rf-close');
+
+function imageKey(img) { return img.dataset.url || img.src; }
+
+function buildReviewQueue() {
+  const items = [];
+  paperEl.querySelectorAll('.sup-flag').forEach(el => {
+    if (!reviewSkipped.has(el)) items.push({type: 'sup', el});
+  });
+  paperEl.querySelectorAll('img[data-eq-candidate]').forEach(el => {
+    if (keptAsImage.has(imageKey(el))) return; // already decided: stays an image
+    if (reviewSkipped.has(el)) return;
+    items.push({type: 'image', el});
+  });
+  // Walk the paper top to bottom rather than sup-flags-then-images.
+  items.sort((a, b) => {
+    const pos = a.el.compareDocumentPosition(b.el);
+    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+    if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+    return 0;
+  });
+  return items;
+}
+
+function addRfButton(label, cls, handler) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = label;
+  if (cls) btn.classList.add(cls);
+  btn.addEventListener('click', handler);
+  rfActions.appendChild(btn);
+}
+
+function closeReviewFlow() {
+  reviewFlowBar.classList.remove('open');
+  paperEl.querySelectorAll('.review-highlight').forEach(el => el.classList.remove('review-highlight'));
+}
+
+function keepImageAndAdvance(imgEl, sizeValue) {
+  const key = imageKey(imgEl);
+  keptAsImage.set(key, true);
+  // Apply the size directly to this one image rather than calling
+  // rerender() - rerender() rebuilds the WHOLE paper from currentQuestions,
+  // which wipes anything only reflected in the live DOM (already-resolved
+  // sup-flags, any typed edits) since none of that feeds back into the
+  // underlying data. That was the earlier bug here: picking a size looked
+  // like it "did nothing and reset everything", because it actually did
+  // reset everything - every previously-resolved item got re-flagged from
+  // scratch. A direct style change touches only this image.
+  if (currentFormat === 'rtf') {
+    currentSizeMap.set(key, sizeValue);      // bucket name: 'tiny'|'small'|'medium'|'large'
+    imgEl.style.width = SIZE_BUCKET_PCT[sizeValue] + '%';
+  } else {
+    currentImgScale.set(key, sizeValue);     // percentage, e.g. 100
+    const baseW = parseFloat(imgEl.dataset.baseW);
+    const baseH = parseFloat(imgEl.dataset.baseH);
+    if (baseW && baseH) {
+      imgEl.style.width = (baseW * sizeValue / 100).toFixed(1) + 'mm';
+      imgEl.style.height = (baseH * sizeValue / 100).toFixed(1) + 'mm';
+    }
+  }
+  paperEdited = true;
+  showReviewFlow();
+}
+
+function showReviewFlow() {
+  paperEl.querySelectorAll('.review-highlight').forEach(el => el.classList.remove('review-highlight'));
+  const queue = buildReviewQueue();
+  if (!queue.length) {
+    reviewFlowBar.classList.remove('open');
+    statusEl.textContent = 'Nothing left to review — powers and equation images are all decided.';
+    return;
+  }
+  const item = queue[0];
+  reviewFlowBar.classList.add('open');
+  rfProgress.textContent = `${queue.length} item${queue.length !== 1 ? 's' : ''} left to review`;
+  item.el.classList.add('review-highlight');
+  item.el.scrollIntoView({behavior: 'smooth', block: 'center'});
+
+  rfActions.innerHTML = '';
+  if (item.type === 'sup') {
+    rfContent.textContent = `Suspected power/subscript: "${item.el.textContent}" — adjust it, or leave as plain text?`;
+    addRfButton('Superscript', 'primary', () => { resolveSupFlag(item.el, 'sup'); showReviewFlow(); });
+    addRfButton('Subscript', null, () => { resolveSupFlag(item.el, 'sub'); showReviewFlow(); });
+    addRfButton('Leave as text', null, () => { resolveSupFlag(item.el, 'text'); showReviewFlow(); });
+    addRfButton('Skip →', null, () => { reviewSkipped.add(item.el); showReviewFlow(); });
+  } else {
+    rfContent.textContent = 'Equation-candidate image — convert to LaTeX, or keep it as an image?';
+    addRfButton('Convert to LaTeX…', 'primary', () => {
+      closeReviewFlow();
+      openEqModal(item.el); // resume by clicking "Review next" again once saved
+    });
+    if (currentFormat === 'rtf') {
+      ['tiny', 'small', 'medium', 'large'].forEach(bucket => {
+        addRfButton(`Keep as image: ${bucket}`, null, () => keepImageAndAdvance(item.el, bucket));
+      });
+    } else {
+      [50, 75, 100, 150].forEach(pct => {
+        addRfButton(`Keep as image: ${pct}%`, null, () => keepImageAndAdvance(item.el, pct));
+      });
+    }
+    addRfButton('Skip →', null, () => { reviewSkipped.add(item.el); showReviewFlow(); });
+  }
+}
+
+reviewNextBtn.addEventListener('click', showReviewFlow);
+rfClose.addEventListener('click', closeReviewFlow);
 
 function rerender() {
   if (!currentQuestions) return;
@@ -1849,6 +2133,7 @@ function rerender() {
     const pagesEl = paperEl.querySelector('.cp-pages');
     if (pagesEl) pagesEl.textContent = pageCount;
     addManualBreakHandles();
+    addWriteLinesHandles();
   });
 }
 
@@ -1859,8 +2144,8 @@ ocrBtn.addEventListener('click', async () => {
   // hallucinate LaTeX) trying to "transcribe" a genuine diagram or graph.
   const candidates = [...paperEl.querySelectorAll('img[data-eq-auto]')];
   if (!candidates.length) { statusEl.textContent = 'No equation-sized images found to transcribe.'; return; }
-  if (!GEMINI_PROXY_URL) {
-    statusEl.textContent = 'Set GEMINI_PROXY_URL near the top of the script to your Apps Script Web App URL first.';
+  if (!getProxyUrl()) {
+    statusEl.textContent = 'Set an OCR proxy URL (click any equation image, or scroll the modal) first.';
     return;
   }
   ocrBtn.disabled = true;
@@ -1891,6 +2176,11 @@ fileInput.addEventListener('change', async () => {
   reviewBtn.style.display = ''; ocrBtn.style.display = 'none'; ocrResults.clear();
   currentImgScale = new Map();
   currentImgAlign = new Map();
+  reviewNextBtn.disabled = true;
+  addLinedPageBtn.disabled = true;
+  closeReviewFlow();
+  reviewSkipped = new WeakSet();
+  keptAsImage.clear();
 
   const reader = new FileReader();
   reader.onload = async (e) => {
@@ -1935,9 +2225,11 @@ fileInput.addEventListener('change', async () => {
       (eqAutoCount ? ` — ${eqAutoCount} look like small equation crops, try "Transcribe equations" if you have a proxy set up.` : '.');
     printBtn.disabled = false;
     pdfBtn.disabled = false; texBtn.disabled = false;
+    addLinedPageBtn.disabled = false;
     const reviewableCount = format === 'rtf' ? currentSizeMap.size : paperEl.querySelectorAll('img[data-base-w]').length;
     reviewBtn.disabled = (reviewableCount === 0);
     ocrBtn.disabled = (eqAutoCount === 0);
+    reviewNextBtn.disabled = false;
   };
   reader.readAsText(file, 'ISO-8859-1');
 });
@@ -2002,7 +2294,7 @@ pdfBtn.addEventListener('click', () => {
   // Manual-break markers must stay in the DOM (their page-break-after is
   // what forces the real break) - only their on-screen label/remove button
   // and the "+ page break" insert handles are editor-only chrome.
-  const hiddenBreakUi = Array.from(paperEl.querySelectorAll('.manual-break .mb-tag, .mb-insert-handle'));
+  const hiddenBreakUi = Array.from(paperEl.querySelectorAll('.manual-break .mb-tag, .mb-insert-handle, .lined-page .lp-remove, .wl-insert-handle, .write-lines-block .wl-remove'));
   hiddenBreakUi.forEach(el => { el.style.display = 'none'; });
   const wasEditable = paperEl.getAttribute('contenteditable');
   paperEl.removeAttribute('contenteditable');
