@@ -32,6 +32,7 @@
   #controls button:disabled { opacity: 0.4; cursor: not-allowed; }
   #status { font-size: 12px; opacity: 0.8; }
   .spacer { flex: 1; }
+  #page-count { display: none; position: fixed; left: 14px; bottom: 14px; z-index: 80; background: var(--ink); color: #f4f1ea; font-family: var(--mono); font-size: 12px; padding: 6px 12px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
 
   #sup-banner {
     max-width: 900px; margin: 16px auto 0; background: #fff7e0; border: 1px solid #e0c98a;
@@ -124,13 +125,15 @@
   #eq-modal button { font-family: var(--mono); font-size: 12.5px; padding: 7px 12px; border-radius: 4px; border: 1px solid var(--rule); background: #fff; cursor: pointer; }
   #eq-modal button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   #eq-modal button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #eq-modal .eq-help { font-size: 12px; color: #555; margin-bottom: 8px; }
+  #eq-modal .eq-help a { color: var(--accent); font-weight: 600; }
   #eq-modal .eq-status { font-size: 11.5px; color: #777; margin-top: 6px; min-height: 14px; }
   #eq-modal .eq-proxy-row { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--rule); font-size: 11.5px; color: #777; }
   #eq-modal .eq-proxy-row input { width: 100%; font-family: var(--mono); font-size: 11.5px; padding: 4px; margin-top: 4px; }
 
   /* Print */
   @media print {
-    #controls, #sizing-panel, #edit-hint, #sup-banner { display: none !important; }
+    #controls, #sizing-panel, #edit-hint, #sup-banner, #page-count { display: none !important; }
     .sup-flag { background: none !important; outline: none !important; }
     body { background: #fff; }
     #paper { box-shadow: none; margin: 0; max-width: none; padding: 0; display: block !important; }
@@ -217,6 +220,7 @@
     </select>
   </label>
   <label><input type="checkbox" id="totalBottomToggle"> Total at bottom of page (exam mode)</label>
+  <label><input type="checkbox" id="pageNumToggle" checked> Page numbers (PDF)</label>
   <button id="addLinedPageBtn" disabled>+ Add writing page</button>
   <span class="spacer"></span>
   <span id="status">Upload an ExamWizard (Edexcel) .doc file to begin.</span>
@@ -248,6 +252,7 @@
     <h3>Equation</h3>
     <div class="eq-preview" id="eq-modal-img-wrap"></div>
     <div class="eq-status" id="eq-modal-status"></div>
+    <div class="eq-help">Need help writing the LaTeX? Try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a> (opens in a new tab), then paste the result here.</div>
     <textarea id="eq-modal-input" placeholder="Type LaTeX here, e.g. \frac{a}{b}"></textarea>
     <div class="eq-render-preview" id="eq-modal-render"></div>
     <div class="eq-row">
@@ -270,6 +275,7 @@
   <div id="rf-actions"></div>
 </div>
 
+<div id="page-count"></div>
 <div id="paper" class="compressed"></div>
 <div id="edit-hint">✏️ Click any text in the paper to edit it directly — Ctrl/Cmd+B bold, Ctrl/Cmd+I italic, Ctrl/Cmd+Z undo. Type ^2 (or ^{2n+1} / ^(2n+1) for multi-character powers) and it will auto-convert to a real superscript shortly after you stop typing. Yellow-highlighted digits are suspected missed superscripts/subscripts — click = superscript, Shift+click = subscript, Alt+click = leave as-is. Click any image (diagram or equation) to type its LaTeX by hand — leave the box blank to put the original image back (need help writing it? try <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">latexeditor.lagrida.com</a>). Switching layout or re-uploading will discard edits.</div>
 
@@ -837,6 +843,7 @@ function refreshPagination() {
   computeAndShowPageBreaks(modeSelect.value);
   addManualBreakHandles();
   addWriteLinesHandles();
+  updatePageCount();
 }
 
 /* =========================================================================
@@ -844,14 +851,97 @@ function refreshPagination() {
    ========================================================================= */
 const WRITE_LINES_BLOCK_COUNT = 6;
 
-function insertWriteLinesBlock(qbody, handle) {
+/* ---- Page measurement (screen width matches the printed page width) ---- */
+function pxPerMm() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:100mm;width:1px;';
+  document.body.appendChild(probe);
+  const px = probe.getBoundingClientRect().height / 100;
+  probe.remove();
+  return px;
+}
+
+// How many 8mm lines fit between this point and the bottom of its page (leaving room
+// for the question's [Total] line). Exact in exam layout; in compressed layout it counts
+// from the last forced break (cover / manual break / writing page / top of paper), so it
+// is approximate where the browser pushes a whole question onto the next page.
+function linesToFillPage(qbody, handle) {
+  const mm = pxPerMm(), pagePx = 281 * mm;
+  const q = qbody.closest('.question');
+  let startEl = q;
+  if (paperEl.classList.contains('exam')) {
+    const prev = q.previousElementSibling;
+    if (prev && prev.classList.contains('papertitle')) startEl = prev;
+  } else {
+    while (startEl.previousElementSibling) {
+      const p = startEl.previousElementSibling;
+      if (p.classList.contains('manual-break') || p.classList.contains('coverpage') || p.classList.contains('lined-page')) break;
+      startEl = p;
+    }
+  }
+  const qtotal = qbody.querySelector(':scope > .qtotal');
+  const reserve = qtotal ? qtotal.getBoundingClientRect().height + 14 : 0;
+  const y = (handle.getBoundingClientRect().top - startEl.getBoundingClientRect().top) % pagePx;
+  const usable = pagePx - y - reserve - 5 * mm - 10; // 5mm = block's top padding
+  return Math.floor(usable / (8 * mm));
+}
+
+/* ---- Approximate page count (forced breaks are exact; free flow is estimated) ---- */
+function estimatePageCount() {
+  const pagePx = 281 * pxPerMm();
+  const exam = paperEl.classList.contains('exam');
+  let pages = 0, segTop = null, segBottom = 0, extra = 0;
+  const flush = () => {
+    if (segTop !== null) { pages += Math.max(1, Math.ceil((segBottom - segTop - 2) / pagePx)); segTop = null; }
+  };
+  Array.from(paperEl.children).forEach(el => {
+    const cl = el.classList;
+    if (cl.contains('page-break-line') || cl.contains('mb-insert-handle')) return;
+    const r = el.getBoundingClientRect();
+    if (cl.contains('manual-break')) { flush(); return; }
+    if (cl.contains('coverpage') || cl.contains('lined-page')) { flush(); pages += 1; return; }
+    if (exam && cl.contains('papertitle')) { extra += r.height + 18; return; }
+    if (exam && cl.contains('question')) {
+      flush();
+      pages += Math.max(1, Math.ceil((r.height + extra - 2) / pagePx));
+      extra = 0;
+      return;
+    }
+    if (segTop === null) segTop = r.top;
+    segBottom = r.bottom;
+  });
+  flush();
+  return pages;
+}
+
+function updatePageCount() {
+  const pill = document.getElementById('page-count');
+  if (!currentQuestions || paperEl.style.display === 'none') { pill.style.display = 'none'; return 0; }
+  const n = estimatePageCount();
+  pill.textContent = `≈ ${n} page${n !== 1 ? 's' : ''}`;
+  pill.style.display = 'block';
+  const cp = paperEl.querySelector('.cp-pages');
+  if (cp) cp.textContent = n;
+  return n;
+}
+let pageCountTimer = null;
+function schedulePageCount() { clearTimeout(pageCountTimer); pageCountTimer = setTimeout(updatePageCount, 300); }
+
+function insertWriteLinesBlock(qbody, handle, fixedCount) {
+  let count = WRITE_LINES_BLOCK_COUNT;
+  if (!fixedCount) {
+    const fit = linesToFillPage(qbody, handle);
+    if (fit >= 1) count = Math.min(fit, 40);
+    else statusEl.textContent = 'Not much room left on this page — added the default 6 lines instead.';
+  }
   const block = document.createElement('div');
   block.className = 'write-lines-block';
   block.setAttribute('contenteditable', 'false');
-  block.innerHTML = `<button type="button" class="wl-remove" title="Remove these lines">✕</button>${'<div class="write-line"></div>'.repeat(WRITE_LINES_BLOCK_COUNT)}`;
-  block.querySelector('.wl-remove').addEventListener('click', (e) => { e.preventDefault(); block.remove(); paperEdited = true; });
+  block.innerHTML = `<button type="button" class="wl-remove" title="Remove these lines">✕</button>${'<div class="write-line"></div>'.repeat(count)}`;
+  block.querySelector('.wl-remove').addEventListener('click', (e) => { e.preventDefault(); block.remove(); paperEdited = true; schedulePageCount(); });
   qbody.insertBefore(block, handle);
   paperEdited = true;
+  updatePageCount();
 }
 
 function addWriteLinesHandles() {
@@ -861,7 +951,8 @@ function addWriteLinesHandles() {
     handle.className = 'wl-insert-handle';
     handle.setAttribute('contenteditable', 'false');
     handle.innerHTML = `<button type="button">+ Add lines</button>`;
-    handle.querySelector('button').addEventListener('click', (e) => { e.preventDefault(); insertWriteLinesBlock(qbody, handle); });
+    handle.querySelector('button').title = 'Fills the rest of this page with lines (Shift+click = 6 lines)';
+    handle.querySelector('button').addEventListener('click', (e) => { e.preventDefault(); insertWriteLinesBlock(qbody, handle, e.shiftKey); });
     qbody.insertBefore(handle, qbody.querySelector(':scope > .qtotal') || null);
   });
 }
@@ -1222,6 +1313,7 @@ function applyImageAlign() {
     if (align === 'left') img.classList.add('diagram-wrap-left');
     else if (align === 'right') img.classList.add('diagram-wrap-right');
   });
+  schedulePageCount();
 }
 
 function flattenElementInPlace(el) {
@@ -1280,6 +1372,8 @@ paperEl.addEventListener('input', () => {
 
 // Typed ^ shorthand: live conversion on delimiter keyup, plus a debounced sweep and a blur sweep.
 let supSweepTimer = null;
+paperEl.addEventListener('input', schedulePageCount);
+paperEl.addEventListener('load', schedulePageCount, true); // images finishing loading change heights
 paperEl.addEventListener('input', () => {
   clearTimeout(supSweepTimer);
   supSweepTimer = setTimeout(() => applyManualSuperscripts(paperEl), 600);
@@ -1529,11 +1623,10 @@ function rerender() {
   paperEl.querySelectorAll('.qbody').forEach(flagSuspectedExponents);
   if (flattenToggle.checked) flattenLineBreaks();
   requestAnimationFrame(() => {
-    const pageCount = computeAndShowPageBreaks(mode);
-    const pagesEl = paperEl.querySelector('.cp-pages');
-    if (pagesEl) pagesEl.textContent = pageCount;
+    computeAndShowPageBreaks(mode);
     addManualBreakHandles();
     addWriteLinesHandles();
+    updatePageCount();
   });
 }
 
@@ -1647,6 +1740,7 @@ defaultWrapSelect.addEventListener('change', () => {
 
 totalBottomToggle.addEventListener('change', () => {
   paperEl.classList.toggle('total-bottom', totalBottomToggle.checked);
+  schedulePageCount();
 });
 
 pdfBtn.addEventListener('click', () => {
@@ -1683,7 +1777,14 @@ pdfBtn.addEventListener('click', () => {
     // 'css' only: mixing in 'legacy' causes blank pages (html2pdf.js issue #184).
     pagebreak: { mode: ['css'] }
   };
-  html2pdf().set(opt).from(paperEl).save().then(() => {
+  html2pdf().set(opt).from(paperEl).toPdf().get('pdf').then(pdf => {
+    if (document.getElementById('pageNumToggle').checked) {
+      const n = pdf.internal.getNumberOfPages();
+      pdf.setFontSize(9);
+      pdf.setTextColor(110);
+      for (let i = 1; i <= n; i++) { pdf.setPage(i); pdf.text(`Page ${i} of ${n}`, 105, 294, {align: 'center'}); }
+    }
+  }).save().then(() => {
     statusEl.textContent = 'PDF downloaded.';
     restore();
   }).catch(err => {
