@@ -257,6 +257,9 @@
      float before the next sibling (.marks, .qtotal, the next part) - it
      just no longer clears mid-section, so wrap-around images now work
      across multiple paragraphs within the same part/intro. */
+  /* A lettered part's first paragraph sits on the same line as its (a)/(b)
+     label, instead of the label standing alone above the text. */
+  .part > strong:first-child + p { display: inline; }
   .part::after, .question::after {
     content: ""; display: block; clear: both;
   }
@@ -854,9 +857,18 @@ function stripDottedLines(runs) {
     // that hint is genuinely useful (tells the student what to answer in)
     // so turn it into a clear bracketed note instead of leaving a stray,
     // context-free symbol sitting alone on its own line.
+    // A real unit starts with a letter or unit symbol ("cm", "kg", "°", "%").
+    // Anything else directly after the dots is punctuation belonging to the
+    // question itself - the comma and closing bracket of a coordinate answer
+    // "(......., .......)" - and must neither become a bogus
+    // "[answer in ,]" hint nor be swallowed. Those dots become a short blank
+    // to write in, and the punctuation is kept.
     let t = r.text.replace(/\.{4,}\s*([^\s.\n]{0,10})?/g, (m, unit) => {
       unit = (unit || '').trim();
-      return unit ? ` [answer in ${unit}]` : '';
+      if (!unit) return '';
+      const um = unit.match(/^([A-Za-z\u00b0%\u00a3$\u20ac\u00b5\u03a9\u00b2\u00b3\/]+)(.*)$/);
+      if (um) return ` [answer in ${um[1]}]${um[2]}`;
+      return '\u2002______' + unit;
     });
     t = t.replace(/[ \t]+\n/g, '\n');
     t = t.replace(/\n{3,}/g, '\n\n');
