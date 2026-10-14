@@ -25,34 +25,42 @@
     color: var(--ink);
   }
 
-  /* ---------- Control bar (screen only) ---------- */
+  /* ---------- Control bar (screen only) ----------
+     Two tiers: a slim top row for file + output actions, and a grouped
+     options row (Layout / Pages / Text / Images & equations) that can be
+     folded away with the "Options" button once a paper is set up. */
   #controls {
     position: sticky; top: 0; z-index: 10;
     background: var(--ink); color: #f4f1ea;
-    padding: 14px 24px;
-    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
     font-family: var(--mono); font-size: 13px;
   }
+  #controls .bar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 20px; }
+  #controls #barOpts { background: #262622; border-top: 1px solid #3a362d; gap: 6px 4px; padding: 7px 20px; font-size: 12px; }
+  #controls.opts-collapsed #barOpts { display: none; }
+  #controls .grp { display: flex; align-items: center; gap: 10px; padding: 0 16px 0 0; margin-right: 12px; border-right: 1px solid #3d392f; flex-wrap: wrap; }
+  #controls .grp:last-child { border-right: none; }
+  #controls .grp-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: #8c8574; }
+  #controls .sub-opts { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   #controls h1 {
     font-family: var(--serif); font-size: 17px; font-weight: 600;
-    margin: 0; letter-spacing: 0.2px; color: #fff;
+    margin: 0 8px 0 0; letter-spacing: 0.2px; color: #fff;
   }
   #controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-  #controls input[type="file"] {
-    color: #f4f1ea; font-family: var(--mono); font-size: 12px; max-width: 220px;
-  }
   #controls select, #controls button {
-    font-family: var(--mono); font-size: 13px;
+    font-family: var(--mono); font-size: inherit;
     background: #2a2a26; color: #f4f1ea; border: 1px solid #504a3d;
-    padding: 6px 10px; border-radius: 3px; cursor: pointer;
+    padding: 5px 9px; border-radius: 3px; cursor: pointer;
   }
   #controls button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   #controls label.filebtn {
-    font-family: var(--mono); font-size: 13px; background: #2a2a26; color: #f4f1ea;
-    border: 1px solid #504a3d; padding: 6px 10px; border-radius: 3px; cursor: pointer;
+    background: #2a2a26; color: #f4f1ea;
+    border: 1px solid #504a3d; padding: 5px 10px; border-radius: 3px; cursor: pointer;
   }
+  #controls label.filebtn.main { background: var(--accent); border-color: var(--accent); color: #fff; }
   #controls button:disabled { opacity: 0.4; cursor: not-allowed; }
-  #status { font-size: 12px; opacity: 0.8; }
+  #fileName { font-size: 12px; opacity: 0.7; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #controls #barStatus { padding: 0 20px 8px; }
+  #status { font-size: 11.5px; opacity: 0.75; flex: 1 1 auto; line-height: 1.3; }
   .spacer { flex: 1; }
 
   /* ---------- Superscript instructions banner (screen only) ---------- */
@@ -62,6 +70,8 @@
     font-family: var(--mono); font-size: 12.5px; color: #4a3f1e; line-height: 1.5;
   }
   #sup-banner strong { color: var(--accent); }
+  #sup-banner summary { cursor: pointer; }
+  #sup-banner[open] summary { margin-bottom: 6px; }
 
   /* ---------- Sizing review panel ---------- */
   #sizing-panel {
@@ -344,6 +354,90 @@
     font-size: 14px; font-family: var(--mono); color: #444; border-top: 1px solid var(--rule); padding-top: 14px;
   }
 
+  /* ---------- Formula sheet page ----------
+     A page of official reference formulae (OCR A Level Maths H240, or
+     Edexcel iGCSE Higher) inserted at the start of the paper, matching the
+     real exam convention - OCR prints its formulae at the front of the
+     paper rather than issuing a separate booklet, and Edexcel's iGCSE
+     formula sheet works the same way. Always its own forced page, same
+     pattern as .coverpage/.lined-page. The content is the mathematical
+     formulae themselves (facts, not copyrightable) laid out in this
+     tool's own styling - not a reproduction of either board's typeset
+     page or branding. */
+  /* Only a break AFTER it: whatever precedes (a cover page) already breaks
+     after itself, and a second forced break before it makes html2pdf emit a
+     blank page. 279mm tall, not the full 281mm, so a hair of rounding can't
+     push it onto a second page. */
+  .formula-sheet {
+    page-break-after: always; break-after: page;
+    box-sizing: border-box; min-height: 279mm; padding-top: 2mm;
+    font-size: 12.5px; line-height: 1.5;
+  }
+  .fs-title { font-family: var(--serif); font-size: 18px; font-weight: 700; margin: 0 0 3mm; text-align: center; }
+  .fs-subtitle { font-family: var(--mono); font-size: 11px; color: #777; text-align: center; margin: 0 0 6mm; }
+  .fs-columns { column-count: 2; column-gap: 8mm; }
+  .fs-section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 4mm; }
+  .fs-section h4 { font-family: var(--serif); font-size: 12.5px; font-weight: 700; margin: 0 0 1.5mm; }
+  .fs-section .katex { font-size: 1em; }
+  .fs-section table { border-collapse: collapse; margin: 1mm 0; font-size: 0.95em; }
+  .fs-section table.fs-table td, .fs-section table.fs-table th {
+    border: 1px solid var(--rule); padding: 1.5px 6px; text-align: left; font-weight: 400;
+  }
+  .fs-section table.fs-table th { font-family: var(--mono); font-size: 0.85em; color: #555; }
+  .fs-section table.fs-compact td, .fs-section table.fs-compact th { padding: 1px 3px; font-size: 0.82em; }
+  .fs-line { margin: 1mm 0; }
+  .fs-note { font-size: 0.9em; color: #555; }
+
+  /* ---------- Auto-paginated A4 layout ----------
+     Pages are real fixed-height boxes (279mm, a hair under the 281mm of
+     printable height so rounding can never spill a blank page), filled by
+     measuring actual rendered content in the same 200mm column the
+     print/PDF uses - so where a break lands on screen is where it lands on
+     paper. Each page is a flex column: question blocks, then a stretchy
+     filler (ruled lines), then - in one-question-per-page mode - the
+     question's [Total] pinned to the bottom, then a small footer holding the
+     page number. */
+  #paper.paged .qpage {
+    display: flex; flex-direction: column; height: 279mm; box-sizing: border-box;
+    page-break-after: always; break-after: page;
+    break-inside: avoid; page-break-inside: avoid;
+    border-bottom: 1px dashed #cfc8b6;
+  }
+  #paper.paged .qpage:last-child { page-break-after: auto; break-after: auto; }
+  #paper.paged.pdf-mode .qpage { border-bottom: none; }
+  /* A single block taller than a whole page can't be split mid-part, so its
+     page is allowed to grow and run onto the next physical page instead of
+     overflowing into (and overlapping) whatever follows. */
+  #paper.paged .qpage.qpage-tall { height: auto; min-height: 279mm; break-inside: auto; page-break-inside: auto; }
+  #paper.paged .qpage.qpage-tall .qpage-body { flex: 1 0 auto; }
+  .qpage-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .qpage-body > * { flex: 0 0 auto; }
+  .qpage-body > .pg-filler { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  .qpage-foot { flex: 0 0 8mm; display: flex; align-items: flex-end; justify-content: center; }
+  .page-num { display: none; font-family: var(--mono); font-size: 10.5px; color: #888; }
+  #paper.paged.show-pagenums .page-num { display: inline; }
+  .pg-cont { font-weight: 700; font-style: italic; color: #777; margin-bottom: 4px; }
+  #paper.paged .answer-space { overflow: hidden; border-bottom: none; }
+  #paper.paged .qtitle { margin-top: 0; }
+  /* one question per page - same typography as the plain exam layout */
+  #paper.paged.pp-one .qbody { font-size: 16px; line-height: 1.6; }
+  #paper.paged.pp-one .part { margin: 14px 0; }
+  #paper.paged.pp-one .marks { font-style: italic; font-size: 14px; color: #555; float: right; }
+  #paper.paged.pp-one .answer-hint { font-size: 14px; }
+  #paper.paged.pp-one img.diagram { display: block; margin: 14px auto; }
+  #paper.paged.pp-one .qtotal { font-size: 14px; margin-top: auto; padding-top: 8px; }
+  /* several questions per page - same typography as the compressed layout */
+  #paper.paged.pp-pack .qbody { font-size: 14px; line-height: 1.35; }
+  #paper.paged.pp-pack .part { margin: 2px 0 2px 22px; }
+  #paper.paged.pp-pack .marks { font-style: italic; font-size: 12.5px; color: #555; float: right; }
+  #paper.paged.pp-pack .answer-hint { font-size: 12.5px; }
+  #paper.paged.pp-pack img.diagram { display: block; margin: 6px auto; }
+  #paper.paged.pp-pack .qtotal { font-size: 12.5px; margin-bottom: 4px; }
+  #paper.paged.pp-pack .qtitle { margin-top: 10px; }
+  #paper.paged.pp-pack .qpage-body > .qtitle:first-child { margin-top: 0; }
+  .lined-page .lp-foot { position: absolute; bottom: 2mm; left: 0; right: 0; text-align: center; }
+  @media print { #paper.paged .qpage { border-bottom: none; } }
+
   /* ---------- Lined writing page ----------
      A blank full page of ruled lines (extra answer/working space, common
      on A-level papers). Always its own page regardless of layout mode.
@@ -368,7 +462,9 @@
     color: #8a8272; text-align: center; margin: 0 0 10mm;
   }
   .write-line {
-    height: 8mm; border-bottom: 1px solid var(--rule);
+    /* whole pixels (not 8mm = 30.24px): fractional heights make the rules
+       land unevenly when rasterised for the PDF. */
+    height: 30px; border-bottom: 1px solid var(--rule);
   }
   .lined-page .lp-remove {
     position: absolute; top: 4mm; right: 4mm; font-family: var(--mono); font-size: 10.5px;
@@ -406,52 +502,83 @@
 <body>
 
 <div id="controls">
-  <h1>Exam Paper Builder</h1>
-  <label>Source file
-    <input type="file" id="fileInput" accept=".doc,.rtf,.docx">
-  </label>
-  <span id="formatHint" style="opacity:0.6;">Accepts ExamWizard (Edexcel) or ExamBuilder (OCR) .doc exports, or a hand-assembled Word .docx — format is auto-detected.</span>
-  <label>Layout
-    <select id="modeSelect">
-      <option value="compressed">Compressed (revision sheet)</option>
-      <option value="exam">Exam layout (1 question / page)</option>
-    </select>
-  </label>
-  <button id="reviewBtn" disabled>Review diagram sizes</button>
-  <button id="ocrBtn" disabled style="display:none;">Transcribe equations (OCR)</button>
-  <button id="reviewNextBtn" disabled>Review next ▸</button>
-  <label><input type="checkbox" id="coverToggle"> Cover page</label>
-  <label><input type="checkbox" id="flattenToggle"> One line per section</label>
-  <label>Default wrap
-    <select id="defaultWrapSelect">
-      <option value="none">Off</option>
-      <option value="left">Image left</option>
-      <option value="right">Image right</option>
-    </select>
-  </label>
-  <label><input type="checkbox" id="totalBottomToggle"> Total at bottom of page (exam mode)</label>
-  <button id="addLinedPageBtn" disabled>+ Add writing page</button>
-  <button id="addEquationBtn" disabled title="Click where you want it in the paper first, then press this">+ Equation</button>
-  <button id="saveBtn" disabled title="Download your work so far as a file you can reopen later">Save progress</button>
-  <label class="filebtn" title="Reopen a paper you saved earlier">Open progress
-    <input type="file" id="projectInput" accept=".json,application/json" style="display:none;">
-  </label>
-  <span class="spacer"></span>
-  <span id="status">Upload an ExamWizard (Edexcel) .doc file to begin.</span>
-  <button id="printBtn" disabled>Print / Save as PDF</button>
-  <button id="pdfBtn" class="primary" disabled>Download PDF</button>
-  <button id="texBtn" disabled>Download LaTeX</button>
+  <div class="bar-row" id="barTop">
+    <h1>Exam Paper Builder</h1>
+    <label class="filebtn main" title="Accepts ExamWizard (Edexcel) or ExamBuilder (OCR) .doc exports, or a hand-assembled Word .docx - the format is detected automatically">Open paper…
+      <input type="file" id="fileInput" accept=".doc,.rtf,.docx" style="display:none;">
+    </label>
+    <span id="fileName"></span>
+    <label class="filebtn" title="Reopen a paper you saved earlier">Open progress
+      <input type="file" id="projectInput" accept=".json,application/json" style="display:none;">
+    </label>
+    <button id="saveBtn" disabled title="Download your work so far as a file you can reopen later">Save progress</button>
+    <span class="spacer"></span>
+    <button id="optToggle" type="button" title="Show or hide the options row">Options ▾</button>
+    <button id="printBtn" disabled>Print</button>
+    <button id="pdfBtn" class="primary" disabled>Download PDF</button>
+    <button id="texBtn" disabled>LaTeX</button>
+  </div>
+  <div class="bar-row" id="barStatus"><span id="status">Open an ExamWizard (Edexcel) or ExamBuilder (OCR) .doc, or a Word .docx, to begin.</span></div>
+  <div class="bar-row" id="barOpts">
+    <div class="grp">
+      <span class="grp-label">Layout</span>
+      <select id="modeSelect">
+        <option value="paged">A4 pages (auto-paginate)</option>
+        <option value="compressed">Compressed (revision sheet)</option>
+        <option value="exam">Exam layout (1 question / page)</option>
+      </select>
+      <span class="sub-opts" id="pagedOptions">
+        <label title="Each question starts on its own page, with its total pinned to the bottom"><input type="checkbox" id="onePerPageToggle" checked> One question per page</label>
+        <label title="Fill answer spaces and any spare room on the page with ruled lines"><input type="checkbox" id="fillLinesToggle" checked> Writing lines</label>
+        <label><input type="checkbox" id="pageNumsToggle" checked> Page numbers</label>
+        <button id="reflowBtn" type="button" disabled title="Re-run the page breaks after you've edited text">Re-flow pages</button>
+      </span>
+      <label id="totalBottomLabel" style="display:none;"><input type="checkbox" id="totalBottomToggle"> Total at bottom</label>
+    </div>
+    <div class="grp">
+      <span class="grp-label">Pages</span>
+      <label><input type="checkbox" id="coverToggle"> Cover page</label>
+      <label>Formula sheet
+        <select id="formulaSheetSelect">
+          <option value="none">None</option>
+          <option value="ocr-h240">OCR A Level Maths (H240)</option>
+          <option value="edexcel-igcse">Edexcel iGCSE Higher</option>
+        </select>
+      </label>
+      <button id="addLinedPageBtn" disabled>+ Writing page</button>
+    </div>
+    <div class="grp">
+      <span class="grp-label">Text</span>
+      <label><input type="checkbox" id="flattenToggle"> One line per section</label>
+      <label>Image wrap
+        <select id="defaultWrapSelect">
+          <option value="none">Off</option>
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
+    </div>
+    <div class="grp">
+      <span class="grp-label">Images &amp; equations</span>
+      <button id="reviewNextBtn" disabled>Review next ▸</button>
+      <button id="reviewBtn" disabled>Diagram sizes</button>
+      <button id="addEquationBtn" disabled title="Click where you want it in the paper first, then press this">+ Equation</button>
+      <button id="ocrBtn" disabled style="display:none;">Transcribe (OCR)</button>
+    </div>
+  </div>
 </div>
 
-<div id="sup-banner">
-  <strong>Superscripts:</strong> nothing converts automatically — any <code>&lt;sup&gt;/&lt;sub&gt;</code>
+<details id="sup-banner">
+  <summary><strong>Tips</strong> &mdash; superscripts, equations and typing shortcuts</summary>
+  <strong>Superscripts:</strong> nothing converts automatically &mdash; any <code>&lt;sup&gt;/&lt;sub&gt;</code>
   markup from the source file is flattened to plain text on import. Anything that looks like it might
   need fixing (a letter directly followed by a digit, e.g. the "2" in "x2") is highlighted in
-  <span class="sup-flag" style="cursor:default;">yellow</span> — click it to make superscript,
+  <span class="sup-flag" style="cursor:default;">yellow</span> &mdash; click it to make superscript,
   Shift+click to make subscript, or Alt+click to leave it as plain text. You can also type <code>^2</code>
   (or <code>^{2n+1}</code> / <code>^(2n+1)</code> for multi-character powers) anywhere in the paper and
   it converts on its own shortly after you stop typing, or click any equation image to type its LaTeX by hand. No image there at all? Type LaTeX between dollar signs, e.g. <code>$\frac{16}{x}\le 2$</code>, or click in the paper and press <strong>+ Equation</strong>.
-</div>
+  <br><strong>A4 pages:</strong> questions are placed onto real A4 pages automatically. After editing text, press <strong>Re-flow pages</strong> to re-run the page breaks.
+</details>
 
 <div id="sizing-panel">
   <h2>Diagram sizes</h2>
@@ -1267,6 +1394,132 @@ function coverPageHTML(title, totalMarks) {
 }
 
 /* =========================================================================
+   4c-ii. FORMULA SHEET CONTENT
+   The actual mathematical content (uncopyrightable facts) of each board's
+   official reference page, laid out in this tool's own styling rather than
+   reproducing either board's typeset page, logo or branding.
+   - OCR A Level Mathematics A (H240): printed at the front of the exam
+     paper itself (OCR doesn't issue a separate formulae booklet for this
+     qualification) - https://www.ocr.org.uk, confirmed against a live
+     H240 question paper's own "Formulae" page.
+   - Edexcel International GCSE Mathematics A (4MA1) Higher Tier formulae
+     sheet - confirmed against Pearson's own published exam paper.
+   ========================================================================= */
+function K(tex, display) {
+  if (typeof katex === 'undefined') return esc(tex);
+  try { return katex.renderToString(tex, {throwOnError: false, displayMode: !!display}); }
+  catch (e) { return esc(tex); }
+}
+function fsSection(title, bodyHtml) {
+  return `<div class="fs-section">${title ? `<h4>${esc(title)}</h4>` : ''}${bodyHtml}</div>`;
+}
+function fsLine(tex) { return `<div class="fs-line">${K(tex)}</div>`; }
+
+function buildOcrH240FormulaSheet() {
+  const sections = [];
+  sections.push(fsSection('Arithmetic series', fsLine(String.raw`S_n = \tfrac{n}{2}(a+l) = \tfrac{n}{2}[2a+(n-1)d]`)));
+  sections.push(fsSection('Geometric series',
+    fsLine(String.raw`S_n = \dfrac{a(1-r^n)}{1-r}`) +
+    fsLine(String.raw`S_\infty = \dfrac{a}{1-r} \quad \text{for } |r| < 1`)));
+  sections.push(fsSection('Binomial series',
+    fsLine(String.raw`(a+b)^n = a^n + \binom{n}{1}a^{n-1}b + \binom{n}{2}a^{n-2}b^2 + \cdots + \binom{n}{r}a^{n-r}b^r + \cdots + b^n \ \ (n \in \mathbb{N})`) +
+    `<div class="fs-note fs-line">where ${K(String.raw`\binom{n}{r} = {}^nC_r = \dfrac{n!}{r!(n-r)!}`)}</div>` +
+    fsLine(String.raw`(1+x)^n = 1 + nx + \dfrac{n(n-1)}{2!}x^2 + \cdots + \dfrac{n(n-1)\cdots(n-r+1)}{r!}x^r + \cdots \quad (|x|<1,\ n \in \mathbb{R})`)));
+  sections.push(fsSection('Differentiation',
+    `<table class="fs-table"><tr><th>f(x)</th><th>f&prime;(x)</th></tr>
+      <tr><td>${K('\\tan kx')}</td><td>${K('k\\sec^2 kx')}</td></tr>
+      <tr><td>${K('\\sec x')}</td><td>${K('\\sec x\\tan x')}</td></tr>
+      <tr><td>${K('\\cot x')}</td><td>${K('-\\operatorname{cosec}^2 x')}</td></tr>
+      <tr><td>${K('\\operatorname{cosec} x')}</td><td>${K('-\\operatorname{cosec} x\\cot x')}</td></tr>
+     </table>` +
+    `<div class="fs-note fs-line">Quotient rule: ${K(String.raw`y=\dfrac{u}{v} \Rightarrow \dfrac{dy}{dx} = \dfrac{v\frac{du}{dx} - u\frac{dv}{dx}}{v^2}`)}</div>` +
+    `<div class="fs-note fs-line">From first principles: ${K(String.raw`f'(x) = \lim_{h\to 0}\dfrac{f(x+h)-f(x)}{h}`)}</div>`));
+  sections.push(fsSection('Integration',
+    fsLine(String.raw`\int \dfrac{f'(x)}{f(x)}\,dx = \ln|f(x)| + c`) +
+    fsLine(String.raw`\int f'(x)[f(x)]^n\,dx = \dfrac{[f(x)]^{n+1}}{n+1} + c`) +
+    `<div class="fs-note fs-line">By parts: ${K(String.raw`\int u\frac{dv}{dx}\,dx = uv - \int v\frac{du}{dx}\,dx`)}</div>`));
+  sections.push(fsSection('Small angle approximations',
+    fsLine(String.raw`\sin\theta \approx \theta,\quad \cos\theta \approx 1-\tfrac{1}{2}\theta^2,\quad \tan\theta \approx \theta`) +
+    `<div class="fs-note fs-line">where &theta; is measured in radians</div>`));
+  sections.push(fsSection('Trigonometric identities',
+    fsLine(String.raw`\sin(A \pm B) = \sin A\cos B \pm \cos A\sin B`) +
+    fsLine(String.raw`\cos(A \pm B) = \cos A\cos B \mp \sin A\sin B`) +
+    fsLine(String.raw`\tan(A \pm B) = \dfrac{\tan A \pm \tan B}{1 \mp \tan A\tan B}`)));
+  sections.push(fsSection('Numerical methods',
+    `<div class="fs-note fs-line">Trapezium rule: ${K(String.raw`\int_a^b y\,dx \approx \tfrac{h}{2}\{(y_0+y_n) + 2(y_1+y_2+\cdots+y_{n-1})\}`)}, where ${K(String.raw`h=\frac{b-a}{n}`)}</div>` +
+    `<div class="fs-note fs-line">Newton&ndash;Raphson: ${K(String.raw`x_{n+1} = x_n - \dfrac{f(x_n)}{f'(x_n)}`)}</div>`));
+  sections.push(fsSection('Probability',
+    fsLine(String.raw`P(A\cup B) = P(A)+P(B)-P(A\cap B)`) +
+    fsLine(String.raw`P(A\cap B) = P(A)P(B\mid A) = P(B)P(A\mid B)`) +
+    `<div class="fs-note fs-line">or ${K(String.raw`P(A\mid B)=\dfrac{P(A\cap B)}{P(B)}`)}</div>`));
+  sections.push(fsSection('Standard deviation',
+    fsLine(String.raw`\sqrt{\dfrac{\sum(x-\bar{x})^2}{n}} = \sqrt{\dfrac{\sum x^2}{n}-\bar{x}^2}`) +
+    `<div class="fs-note fs-line">or</div>` +
+    fsLine(String.raw`\sqrt{\dfrac{\sum f(x-\bar{x})^2}{\sum f}} = \sqrt{\dfrac{\sum fx^2}{\sum f}-\bar{x}^2}`)));
+  sections.push(fsSection('The binomial distribution',
+    `<div class="fs-line">If ${K('X\\sim B(n,p)')} then ${K(String.raw`P(X=x) = \binom{n}{x}p^x(1-p)^{n-x}`)}, mean of X is ${K('np')}, variance of X is ${K('np(1-p)')}</div>`));
+  sections.push(fsSection('Hypothesis test for the mean of a normal distribution',
+    `<div class="fs-line">If ${K('X\\sim N(\\mu,\\sigma^2)')} then ${K(String.raw`\bar{X}\sim N\left(\mu,\frac{\sigma^2}{n}\right)`)}</div>` +
+    `<div class="fs-line">and ${K(String.raw`\dfrac{\bar{X}-\mu}{\sigma/\sqrt{n}}\sim N(0,1)`)}</div>`));
+  sections.push(fsSection('Percentage points of the normal distribution',
+    `<div class="fs-note fs-line">If Z&sim;N(0,1), the table gives z such that P(Z&le;z)=p.</div>` +
+    `<table class="fs-table fs-compact"><tr><th>p</th><td>0.75</td><td>0.90</td><td>0.95</td><td>0.975</td><td>0.99</td><td>0.995</td><td>0.9975</td><td>0.999</td><td>0.9995</td></tr>
+      <tr><th>z</th><td>0.674</td><td>1.282</td><td>1.645</td><td>1.960</td><td>2.326</td><td>2.576</td><td>2.807</td><td>3.090</td><td>3.291</td></tr>
+     </table>`));
+  sections.push(fsSection('Kinematics',
+    `<table class="fs-table"><tr><th>Motion in a straight line</th><th>Motion in two dimensions</th></tr>
+      <tr><td>${K('v=u+at')}</td><td>${K(String.raw`\mathbf{v}=\mathbf{u}+\mathbf{a}t`)}</td></tr>
+      <tr><td>${K('s=ut+\\tfrac12 at^2')}</td><td>${K(String.raw`\mathbf{s}=\mathbf{u}t+\tfrac12\mathbf{a}t^2`)}</td></tr>
+      <tr><td>${K('s=\\tfrac12(u+v)t')}</td><td>${K(String.raw`\mathbf{s}=\tfrac12(\mathbf{u}+\mathbf{v})t`)}</td></tr>
+      <tr><td>${K('v^2=u^2+2as')}</td><td></td></tr>
+      <tr><td>${K('s=vt-\\tfrac12 at^2')}</td><td>${K(String.raw`\mathbf{s}=\mathbf{v}t-\tfrac12\mathbf{a}t^2`)}</td></tr>
+     </table>`));
+
+  return `<div class="formula-sheet" contenteditable="false">
+    <div class="fs-title">Formulae</div>
+    <div class="fs-subtitle">A Level Mathematics A (H240)</div>
+    <div class="fs-columns">${sections.join('')}</div>
+  </div>`;
+}
+
+function buildEdexcelIgcseFormulaSheet() {
+  const rows = [
+    ['Arithmetic series', String.raw`S_n = \tfrac{n}{2}[2a+(n-1)d]`],
+    ['Area of a trapezium', [String.raw`\text{Area} = \tfrac12(a+b)h`, 'a, b parallel sides; h = perpendicular distance between them']],
+    ['The quadratic equation', [String.raw`ax^2+bx+c=0 \ (a\ne 0)`, String.raw`x=\dfrac{-b\pm\sqrt{b^2-4ac}}{2a}`]],
+    ['Sine rule', String.raw`\dfrac{a}{\sin A} = \dfrac{b}{\sin B} = \dfrac{c}{\sin C}`],
+    ['Cosine rule', String.raw`a^2=b^2+c^2-2bc\cos A`],
+    ['Area of a triangle', String.raw`\text{Area} = \tfrac12 ab\sin C`],
+    ['Volume of a cone', String.raw`V=\tfrac13\pi r^2 h`],
+    ['Curved surface area of a cone', String.raw`A=\pi r l`],
+    ['Volume of a prism', 'V = \\text{area of cross-section} \\times \\text{length}'],
+    ['Volume of a cylinder', String.raw`V=\pi r^2 h`],
+    ['Curved surface area of a cylinder', String.raw`A=2\pi r h`],
+    ['Volume of a sphere', String.raw`V=\tfrac43\pi r^3`],
+    ['Surface area of a sphere', String.raw`A=4\pi r^2`],
+  ];
+  // A row's second item is either one LaTeX string, or an array of lines:
+  // LaTeX lines, with a plain-text note given as the array's LAST item
+  // when it contains letters-and-spaces prose (detected by a space + no backslash).
+  const sections = rows.map(([title, body]) => {
+    const lines = Array.isArray(body) ? body : [body];
+    return fsSection(title, lines.map(l => (!/\\/.test(l) && / /.test(l) && /[a-z]{3}/.test(l))
+      ? `<div class="fs-note fs-line">${esc(l)}</div>` : fsLine(l)).join(''));
+  });
+  return `<div class="formula-sheet" contenteditable="false">
+    <div class="fs-title">Formulae sheet &ndash; Higher Tier</div>
+    <div class="fs-subtitle">Pearson Edexcel International GCSE Mathematics A (4MA1)</div>
+    <div class="fs-columns">${sections.join('')}</div>
+  </div>`;
+}
+
+function formulaSheetHTML(key) {
+  if (key === 'ocr-h240') return buildOcrH240FormulaSheet();
+  if (key === 'edexcel-igcse') return buildEdexcelIgcseFormulaSheet();
+  return '';
+}
+
+/* =========================================================================
    4d. ON-SCREEN PAGE BREAK PREVIEW
    Only draws a line where a break is GUARANTEED, never a guess: the cover
    page (if present) always starts a fresh page, "exam" layout forces every
@@ -1290,21 +1543,26 @@ function coverPageHTML(title, totalMarks) {
    ========================================================================= */
 function computeAndShowPageBreaks(mode) {
   paperEl.querySelectorAll('.page-break-line').forEach(el => el.remove());
+  if (mode === 'paged') return countPages(); // pages are explicit boxes - no preview lines needed
   const blocks = Array.from(paperEl.children).filter(el =>
-    el.classList.contains('question') || el.classList.contains('coverpage') || el.classList.contains('lined-page'));
+    el.classList.contains('question') || el.classList.contains('coverpage') || el.classList.contains('lined-page') || el.classList.contains('formula-sheet'));
   if (!blocks.length) return 0;
 
   blocks.forEach((b, i) => {
     const prev = i > 0 ? blocks[i - 1] : null;
     const afterCover = !!prev && prev.classList.contains('coverpage');
     const afterLinedPage = !!prev && prev.classList.contains('lined-page');
+    const afterFormulaSheet = !!prev && prev.classList.contains('formula-sheet');
     const isLinedPage = b.classList.contains('lined-page');
+    const isFormulaSheet = b.classList.contains('formula-sheet');
     const manualBreakBefore = i > 0 && b.previousElementSibling &&
       b.previousElementSibling.classList.contains('manual-break');
-    // A lined writing page always starts a fresh page, and always pushes
-    // whatever follows it onto a fresh page too (its own CSS forces both,
-    // in every layout mode) - the preview here just mirrors that.
-    const forced = i > 0 && (mode === 'exam' || afterCover || afterLinedPage || isLinedPage || manualBreakBefore);
+    // A lined writing page or formula sheet always starts a fresh page,
+    // and always pushes whatever follows it onto a fresh page too (their
+    // own CSS forces both, in every layout mode) - the preview here just
+    // mirrors that.
+    const forced = i > 0 && (mode === 'exam' || afterCover || afterLinedPage || isLinedPage ||
+      afterFormulaSheet || isFormulaSheet || manualBreakBefore);
 
     if (forced) {
       if (!manualBreakBefore) {
@@ -1370,6 +1628,7 @@ function refreshPagination() {
   computeAndShowPageBreaks(modeSelect.value);
   addManualBreakHandles();
   addWriteLinesHandles();
+  if (modeSelect.value === 'paged') renumberPages();
 }
 
 /* =========================================================================
@@ -1462,7 +1721,8 @@ function addLinedPage() {
   page.innerHTML = `
     <div class="lp-label">Additional writing space</div>
     <button type="button" class="lp-remove">✕ Remove page</button>
-    ${lines}`;
+    ${lines}
+    <div class="lp-foot" contenteditable="false"><span class="page-num"></span></div>`;
   page.querySelector('.lp-remove').addEventListener('click', (e) => {
     e.preventDefault();
     page.remove();
@@ -1618,7 +1878,7 @@ function applyManualSuperscripts(root) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       if (!node.data.includes('^')) return NodeFilter.FILTER_REJECT;
-      if (node.parentElement && node.parentElement.closest('sup, sub, .eq-rendered, script, style')) {
+      if (node.parentElement && node.parentElement.closest('sup, sub, .eq-rendered, .formula-sheet, script, style')) {
         return NodeFilter.FILTER_REJECT;
       }
       return NodeFilter.FILTER_ACCEPT;
@@ -1765,6 +2025,277 @@ function flagSuspectedExponents(root) {
     span.title = 'Click = superscript, Shift+click = subscript, Alt+click = leave as-is';
     range.insertNode(span);
   }
+}
+
+/* =========================================================================
+   4h. AUTO-PAGINATED A4 LAYOUT
+   Earlier attempts at automatic page breaks guessed where a page would end
+   from heights measured on screen, and the guess never matched the real
+   print/PDF layout (blank pages, totals in the wrong place). This does the
+   opposite: pages are real fixed-height boxes (see .qpage in the CSS), and
+   content is placed into them one "block" at a time, checking after each
+   insertion whether the page's own body now overflows. The check runs in
+   the same 200mm column the print/PDF uses, so where a break lands on
+   screen is where it lands on paper.
+
+   A block is the smallest thing that must stay together: a question's
+   header + its intro + its first lettered part (so a heading is never left
+   alone at the foot of a page), then each later part on its own. Blocks are
+   never split mid-part. In "one question per page" mode every question
+   starts a fresh page, its [Total] is pinned to the bottom of its LAST page,
+   and each part gets an answer space. In "several per page" mode questions
+   are packed in order, a question that doesn't fit moves whole to the next
+   page, and its total stays directly under it.
+
+   Everything is laid out first in a hidden-in-flow "stage" (so the usual
+   import passes - images, superscript flags, equations - run unchanged and
+   the real heights are known), then moved into pages. Because blocks carry
+   data-block / data-q attributes, "Re-flow pages" can pull the (possibly
+   hand-edited) blocks back out of the existing pages and paginate again
+   without touching the underlying question data.
+   ========================================================================= */
+let paginateToken = 0;
+let lastTallCount = 0;
+function tallNote() { return lastTallCount ? ` ${lastTallCount} page${lastTallCount !== 1 ? 's have' : ' has'} one section taller than a page, so ${lastTallCount !== 1 ? 'they run' : 'it runs'} over - shorten it or split it.` : ''; }
+
+function hasRealContent(html) {
+  if (!html) return false;
+  if (/<img/i.test(html)) return true;
+  return html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/g, '').length > 0;
+}
+
+function buildPagedStageHTML(questions, sizeMap, onePerPage, title, includeTitle) {
+  const fmode = onePerPage ? 'exam' : 'compressed';
+  let blockId = 0;
+  const out = [];
+  questions.forEach((q, qi) => {
+    const qnum = esc(String(q.num));
+    const qa = `data-q="${qnum}"`;
+    let blk = ++blockId;
+    const attrs = () => `${qa} data-block="${blk}"`;
+    if (qi === 0 && includeTitle) out.push(`<h1 class="papertitle pg-el" ${attrs()}>${esc(title)}</h1>`);
+    out.push(`<div class="qtitle pg-el" ${attrs()}><span class="qhead">Q${qnum}.</span></div>`);
+    const introHtml = fragmentToHTML(q.intro, sizeMap, fmode);
+    if (hasRealContent(introHtml)) out.push(`<div class="qbody pg-el" ${attrs()}>${introHtml}</div>`);
+
+    if (q.parts.length) {
+      q.parts.forEach((p, pi) => {
+        if (pi > 0) blk = ++blockId;
+        const mk = p.marks ? ` <span class="marks">[${p.marks} mark${String(p.marks) !== '1' ? 's' : ''}]</span>` : '';
+        const label = p.label ? `<strong>(${p.label})</strong> ` : '';
+        let inner = `<div class="part">${label}${fragmentToHTML(p, sizeMap, fmode)}${mk}</div>`;
+        if (onePerPage) {
+          const m = parseInt(p.marks || '2', 10) || 2;
+          const h = Math.min(Math.max(m * 15, 20), 90);
+          inner += `<div class="answer-space" contenteditable="false" style="height:${h}mm"></div>`;
+        }
+        out.push(`<div class="qbody pg-el" ${attrs()}>${inner}</div>`);
+      });
+    } else if (onePerPage) {
+      const m = parseInt(q.marks || '3', 10) || 3;
+      const h = Math.min(Math.max(m * 15, 25), 120);
+      out.push(`<div class="pg-el" ${attrs()}><div class="answer-space" contenteditable="false" style="height:${h}mm"></div></div>`);
+    }
+
+    if (q.marks) {
+      const t = `[Total: ${q.marks} mark${String(q.marks) !== '1' ? 's' : ''}]`;
+      out.push(onePerPage
+        ? `<div class="qtotal pg-total pg-el" ${qa} data-pinned="1">${t}</div>`
+        : `<div class="qtotal pg-total pg-el" ${qa} data-block="${blk}">${t}</div>`);
+    }
+  });
+  return out.join('\n');
+}
+
+// Images and web fonts (KaTeX) change a block's height once they arrive,
+// so pagination waits for them - measuring before that would under-count.
+async function waitForLayoutAssets(root) {
+  void root.offsetHeight; // force layout so pending fonts get requested
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(imgs.map(img => {
+    if (img.complete && img.naturalWidth) return null;
+    if (img.decode) return img.decode().catch(() => {});
+    return new Promise(res => { img.onload = img.onerror = res; });
+  }));
+  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+}
+
+function makePage(contQ) {
+  const page = document.createElement('div');
+  page.className = 'qpage';
+  const body = document.createElement('div');
+  body.className = 'qpage-body';
+  const foot = document.createElement('div');
+  foot.className = 'qpage-foot';
+  foot.setAttribute('contenteditable', 'false');
+  foot.innerHTML = '<span class="page-num"></span>';
+  page.appendChild(body);
+  page.appendChild(foot);
+  if (contQ) {
+    const c = document.createElement('div');
+    c.className = 'pg-cont';
+    c.setAttribute('contenteditable', 'false');
+    c.textContent = `Q${contQ} (continued)`;
+    body.appendChild(c);
+  }
+  return page;
+}
+function pageOverflows(page) {
+  const body = page.firstChild;
+  return body.scrollHeight > body.clientHeight + 1;
+}
+
+function readPagedOpts() {
+  return {onePerPage: paperEl.classList.contains('pp-one')};
+}
+
+async function paginateStage(stage, opts) {
+  const token = ++paginateToken;
+  await waitForLayoutAssets(stage);
+  if (token !== paginateToken || !stage.isConnected) return 0;
+
+  // Pinned totals are held aside; everything else is grouped into blocks.
+  const totals = new Map();
+  const blocks = [];
+  let lastId = null;
+  Array.from(stage.children).forEach(el => {
+    if (el.dataset.pinned) { totals.set(el.dataset.q, el); return; }
+    const id = el.dataset.block;
+    if (!blocks.length || (id !== undefined && id !== lastId)) {
+      blocks.push({q: el.dataset.q || (blocks.length ? blocks[blocks.length - 1].q : ''), els: []});
+      lastId = id;
+    }
+    blocks[blocks.length - 1].els.push(el);
+  });
+  const groups = [];
+  blocks.forEach(b => {
+    const g = groups[groups.length - 1];
+    if (g && g.q === b.q) g.blocks.push(b); else groups.push({q: b.q, blocks: [b]});
+  });
+
+  const pages = [];
+  const addPage = (contQ) => { const pg = makePage(contQ); paperEl.insertBefore(pg, stage); pages.push(pg); return pg; };
+  const insertInto = (pg, els, before) => els.forEach(el => pg.firstChild.insertBefore(el, before || null));
+
+  if (opts.onePerPage) {
+    for (const g of groups) {
+      let page = addPage(null);
+      const totalEl = totals.get(g.q) || null;
+      if (totalEl) page.firstChild.appendChild(totalEl);
+      let placed = 0;
+      for (const b of g.blocks) {
+        insertInto(page, b.els, totalEl);
+        placed++;
+        if (placed > 1 && pageOverflows(page)) {
+          // Doesn't fit: this question carries on to a continuation page,
+          // and the total moves with it (it belongs on the question's last page).
+          b.els.forEach(el => el.remove());
+          page = addPage(g.q);
+          if (totalEl) page.firstChild.appendChild(totalEl);
+          insertInto(page, b.els, totalEl);
+          placed = 1;
+        }
+      }
+    }
+  } else {
+    let page = addPage(null);
+    let onPage = 0; // blocks already on the current page
+    for (const g of groups) {
+      const all = g.blocks.flatMap(b => b.els);
+      all.forEach(el => page.firstChild.appendChild(el));
+      if (!pageOverflows(page)) { onPage += g.blocks.length; continue; }
+      // The whole question doesn't fit here: start a fresh page, then
+      // place its blocks one at a time, spilling only if it is itself
+      // taller than a page.
+      all.forEach(el => el.remove());
+      if (onPage > 0) { page = addPage(null); onPage = 0; }
+      for (const b of g.blocks) {
+        insertInto(page, b.els);
+        onPage++;
+        if (onPage > 1 && pageOverflows(page)) {
+          b.els.forEach(el => el.remove());
+          page = addPage(g.q);
+          onPage = 1;
+          insertInto(page, b.els);
+        }
+      }
+    }
+  }
+
+  // A page whose content is still taller than the page (one block longer
+  // than a full page) is allowed to grow rather than overflow.
+  lastTallCount = 0;
+  pages.forEach(pg => { if (pageOverflows(pg)) { pg.classList.add('qpage-tall'); lastTallCount++; } });
+
+  // Stretchy filler between the content and the pinned total/footer.
+  pages.forEach(pg => {
+    const body = pg.firstChild;
+    const filler = document.createElement('div');
+    filler.className = 'pg-filler';
+    filler.setAttribute('contenteditable', 'false');
+    body.insertBefore(filler, body.querySelector(':scope > .pg-total[data-pinned]'));
+  });
+  stage.remove();
+  applyFillLines();
+  renumberPages();
+  return pages.length;
+}
+
+function lineHeightPx() {
+  const t = document.createElement('div');
+  t.className = 'write-line';
+  t.style.cssText = 'position:absolute;visibility:hidden;width:10px;';
+  paperEl.appendChild(t);
+  const h = t.getBoundingClientRect().height;
+  t.remove();
+  return h || 30;
+}
+
+// Fill every answer space and each page's spare room with whole ruled lines
+// (never a cut-off half line), or empty them again if the option is off.
+function applyFillLines() {
+  const on = fillLinesToggle.checked;
+  const lh = lineHeightPx();
+  paperEl.querySelectorAll('.qpage .pg-filler, .qpage .answer-space').forEach(el => {
+    el.innerHTML = '';
+    if (!on) return;
+    const n = Math.floor(el.getBoundingClientRect().height / lh + 1e-6);
+    if (n > 0) el.innerHTML = '<div class="write-line"></div>'.repeat(n);
+  });
+}
+
+function countPages() {
+  return Array.from(paperEl.children).filter(el => el.matches('.coverpage, .formula-sheet, .qpage, .lined-page')).length;
+}
+
+// Numbers every physical page in order (cover and formula sheet count but
+// show no number) and refreshes the cover's "Total pages".
+function renumberPages() {
+  const pages = Array.from(paperEl.children).filter(el => el.matches('.coverpage, .formula-sheet, .qpage, .lined-page'));
+  pages.forEach((pg, i) => {
+    const num = pg.querySelector(':scope > .qpage-foot .page-num, :scope > .lp-foot .page-num');
+    if (num) num.textContent = `Page ${i + 1} of ${pages.length}`;
+  });
+  const cp = paperEl.querySelector('.cp-pages');
+  if (cp) cp.textContent = pages.length;
+  return pages.length;
+}
+
+// Pull the blocks (including any hand edits) back out of the current pages
+// and paginate them again - e.g. after typing more text into a question.
+async function repaginate() {
+  const pages = Array.from(paperEl.querySelectorAll(':scope > .qpage'));
+  if (!pages.length) return;
+  statusEl.textContent = 'Re-flowing pages…';
+  const stage = document.createElement('div');
+  stage.className = 'pg-stage';
+  paperEl.insertBefore(stage, pages[0]);
+  pages.forEach(pg => pg.querySelectorAll('.pg-el').forEach(el => stage.appendChild(el)));
+  pages.forEach(pg => pg.remove());
+  stage.querySelectorAll('.answer-space').forEach(a => { a.innerHTML = ''; });
+  const n = await paginateStage(stage, readPagedOpts());
+  statusEl.textContent = `Pages re-flowed (${countPages()} pages in total).` + tallNote();
+  return n;
 }
 
 /* =========================================================================
@@ -1919,9 +2450,19 @@ const printBtn = document.getElementById('printBtn');
 const pdfBtn = document.getElementById('pdfBtn');
 const texBtn = document.getElementById('texBtn');
 const coverToggle = document.getElementById('coverToggle');
+const formulaSheetSelect = document.getElementById('formulaSheetSelect');
 const flattenToggle = document.getElementById('flattenToggle');
 const defaultWrapSelect = document.getElementById('defaultWrapSelect');
 const totalBottomToggle = document.getElementById('totalBottomToggle');
+const totalBottomLabel = document.getElementById('totalBottomLabel');
+const onePerPageToggle = document.getElementById('onePerPageToggle');
+const fillLinesToggle = document.getElementById('fillLinesToggle');
+const pageNumsToggle = document.getElementById('pageNumsToggle');
+const reflowBtn = document.getElementById('reflowBtn');
+const pagedOptionsEl = document.getElementById('pagedOptions');
+const optToggle = document.getElementById('optToggle');
+const controlsEl = document.getElementById('controls');
+const fileNameEl = document.getElementById('fileName');
 const addLinedPageBtn = document.getElementById('addLinedPageBtn');
 addLinedPageBtn.addEventListener('click', addLinedPage);
 let defaultImgAlign = 'none'; // fallback wrap direction for any image without its own per-image override
@@ -2334,12 +2875,23 @@ rfClose.addEventListener('click', closeReviewFlow);
 function rerender() {
   if (!currentQuestions) return;
   const mode = modeSelect.value;
-  paperEl.className = mode + (totalBottomToggle.checked ? ' total-bottom' : '');
+  const paged = mode === 'paged';
+  paperEl.className = paperClassName();
   const title = sourceFileName('Worksheet').replace(/\.(docx?|rtf)$/i, '').replace(/[_-]+/g, ' ');
   const showCover = coverToggle.checked;
   let html = showCover ? coverPageHTML(title, computeTotalMarks(currentQuestions)) : '';
-  html += renderPaper(currentQuestions, currentSizeMap, mode, title, {skipTitle: showCover});
+  html += formulaSheetHTML(formulaSheetSelect.value);
+  if (!paged) html += renderPaper(currentQuestions, currentSizeMap, mode, title, {skipTitle: showCover});
   paperEl.innerHTML = html;
+  // Paged layout: content first goes into a "stage" so every import pass
+  // below runs on it unchanged, then paginateStage() moves it into pages.
+  let stage = null;
+  if (paged) {
+    stage = document.createElement('div');
+    stage.className = 'pg-stage';
+    stage.innerHTML = buildPagedStageHTML(currentQuestions, currentSizeMap, onePerPageToggle.checked, title, !showCover);
+    paperEl.appendChild(stage);
+  }
   paperEl.style.display = 'block';
   paperEl.setAttribute('contenteditable', 'true');
   paperEl.setAttribute('spellcheck', 'false');
@@ -2358,6 +2910,14 @@ function rerender() {
   // already fixed via "^2" shorthand is skipped.
   paperEl.querySelectorAll('.qbody').forEach(flagSuspectedExponents);
   if (flattenToggle.checked) flattenLineBreaks();
+  if (paged) {
+    requestAnimationFrame(() => {
+      paginateStage(stage, readPagedOpts()).then(n => {
+        if (n) statusEl.textContent = `${currentQuestions.length} questions laid out on ${countPages()} A4 pages.` + tallNote();
+      });
+    });
+    return;
+  }
   requestAnimationFrame(() => {
     const pageCount = computeAndShowPageBreaks(mode);
     const pagesEl = paperEl.querySelector('.cp-pages');
@@ -2365,6 +2925,24 @@ function rerender() {
     addManualBreakHandles();
     addWriteLinesHandles();
   });
+}
+
+// One place that decides the paper's class list, so rerender() and a
+// restored saved paper stay consistent.
+function paperClassName() {
+  const mode = modeSelect.value;
+  if (mode === 'paged') {
+    return 'paged ' + (onePerPageToggle.checked ? 'pp-one' : 'pp-pack') + (pageNumsToggle.checked ? ' show-pagenums' : '');
+  }
+  return mode + (totalBottomToggle.checked ? ' total-bottom' : '');
+}
+
+// Only show the options that mean something for the chosen layout.
+function updateModeOptions() {
+  const m = modeSelect.value;
+  pagedOptionsEl.style.display = m === 'paged' ? 'inline-flex' : 'none';
+  totalBottomLabel.style.display = m === 'exam' ? '' : 'none';
+  reflowBtn.disabled = !(m === 'paged' && currentQuestions);
 }
 
 ocrBtn.addEventListener('click', async () => {
@@ -2400,6 +2978,8 @@ fileInput.addEventListener('change', async () => {
   const file = fileInput.files[0];
   if (!file) return;
   if (!confirmDiscardEdits('Loading a new file')) { fileInput.value = ''; return; }
+  fileNameEl.textContent = file.name;
+  fileNameEl.title = file.name;
   statusEl.textContent = 'Reading file…';
   printBtn.disabled = true; reviewBtn.disabled = true;
   pdfBtn.disabled = true; texBtn.disabled = true;
@@ -2449,6 +3029,7 @@ fileInput.addEventListener('change', async () => {
     reviewBtn.disabled = (reviewableCount === 0);
     ocrBtn.disabled = (eqAutoCount === 0);
     reviewNextBtn.disabled = false;
+    updateModeOptions();
   }
 
   if (/\.docx$/i.test(file.name)) {
@@ -2502,15 +3083,44 @@ modeSelect.addEventListener('change', () => {
     return;
   }
   lastModeValue = modeSelect.value;
+  updateModeOptions();
   rerender();
 });
 printBtn.addEventListener('click', () => window.print());
+
+// Paged-layout options. "One question per page" changes what gets built
+// (answer spaces, pinned totals), so it rebuilds like other structural
+// toggles; writing lines and page numbers only restyle what's already there.
+onePerPageToggle.addEventListener('change', () => {
+  if (!confirmDiscardEdits('Changing one question per page')) {
+    onePerPageToggle.checked = !onePerPageToggle.checked;
+    return;
+  }
+  rerender();
+});
+fillLinesToggle.addEventListener('change', () => { if (paperEl.classList.contains('paged')) applyFillLines(); });
+pageNumsToggle.addEventListener('change', () => { paperEl.classList.toggle('show-pagenums', pageNumsToggle.checked); });
+reflowBtn.addEventListener('click', repaginate);
+optToggle.addEventListener('click', () => {
+  const collapsed = controlsEl.classList.toggle('opts-collapsed');
+  optToggle.textContent = collapsed ? 'Options ▸' : 'Options ▾';
+});
 
 coverToggle.addEventListener('change', () => {
   if (!confirmDiscardEdits('Toggling the cover page')) {
     coverToggle.checked = !coverToggle.checked;
     return;
   }
+  rerender();
+});
+
+formulaSheetSelect.addEventListener('change', () => {
+  const prevValue = formulaSheetSelect.dataset.prev || 'none';
+  if (!confirmDiscardEdits('Changing the formula sheet')) {
+    formulaSheetSelect.value = prevValue;
+    return;
+  }
+  formulaSheetSelect.dataset.prev = formulaSheetSelect.value;
   rerender();
 });
 
@@ -2560,11 +3170,27 @@ pdfBtn.addEventListener('click', () => {
   hiddenBreakUi.forEach(el => { el.style.display = 'none'; });
   const wasEditable = paperEl.getAttribute('contenteditable');
   paperEl.removeAttribute('contenteditable');
+  // Paged layout was measured in a 200mm column. On screen #paper has 5mm
+  // side padding inside a 210mm box; html2pdf instead clones it into a 200mm
+  // container, which would leave only 190mm of text width and re-wrap
+  // everything after the pages were laid out. Drop the padding for the
+  // export (like @media print does) so the PDF wraps exactly as measured.
+  const wasPaged = paperEl.classList.contains('paged');
+  const savedStyleAttr = paperEl.getAttribute('style');
+  if (wasPaged) {
+    paperEl.classList.add('pdf-mode');
+    paperEl.style.padding = '0'; paperEl.style.margin = '0';
+    paperEl.style.maxWidth = 'none'; paperEl.style.boxShadow = 'none';
+  }
 
   const restore = () => {
     hiddenLines.forEach(el => { el.style.display = ''; });
     hiddenBreakUi.forEach(el => { el.style.display = ''; });
     if (wasEditable !== null) paperEl.setAttribute('contenteditable', wasEditable);
+    if (wasPaged) {
+      paperEl.classList.remove('pdf-mode');
+      if (savedStyleAttr === null) paperEl.removeAttribute('style'); else paperEl.setAttribute('style', savedStyleAttr);
+    }
     pdfBtn.disabled = false;
   };
 
@@ -2767,8 +3393,12 @@ async function serializeProject() {
     format: currentFormat,
     mode: modeSelect.value,
     cover: coverToggle.checked,
+    formulaSheet: formulaSheetSelect.value,
     flatten: flattenToggle.checked,
     totalBottom: totalBottomToggle.checked,
+    onePerPage: onePerPageToggle.checked,
+    fillLines: fillLinesToggle.checked,
+    pageNums: pageNumsToggle.checked,
     defaultImgAlign,
     title: sourceFileName('Worksheet'),
     paperEdited,
@@ -2857,14 +3487,20 @@ async function restoreProject(text) {
 
   modeSelect.value = p.mode; lastModeValue = p.mode;
   coverToggle.checked = p.cover;
+  formulaSheetSelect.value = p.formulaSheet || 'none';
+  formulaSheetSelect.dataset.prev = formulaSheetSelect.value;
   flattenToggle.checked = p.flatten;
   totalBottomToggle.checked = p.totalBottom;
+  onePerPageToggle.checked = p.onePerPage !== false;
+  fillLinesToggle.checked = p.fillLines !== false;
+  pageNumsToggle.checked = p.pageNums !== false;
+  updateModeOptions();
   defaultImgAlign = p.defaultImgAlign || 'none';
   defaultWrapSelect.value = defaultImgAlign;
   fileInput.value = '';            // the upload box no longer describes what's on screen
   loadedFileName = p.title;
 
-  paperEl.className = p.mode + (p.totalBottom ? ' total-bottom' : '');
+  paperEl.className = paperClassName();
   paperEl.innerHTML = p.paperHtml;
   paperEl.style.display = 'block';
   paperEl.setAttribute('contenteditable', 'true');
@@ -2878,6 +3514,8 @@ async function restoreProject(text) {
   if (pagesEl) pagesEl.textContent = pageCount;
   addManualBreakHandles();
   addWriteLinesHandles();
+  if (p.mode === 'paged') renumberPages();
+  fileNameEl.textContent = p.title || '';
 
   const isEB = currentFormat === 'exambuilder';
   const eqAutoCount = paperEl.querySelectorAll('img[data-eq-auto]').length;
@@ -2930,6 +3568,8 @@ projectInput.addEventListener('change', async () => {
   }
   projectInput.value = '';
 });
+
+updateModeOptions();
 
 // Closing the tab with unsaved work is the one way to lose a big paper.
 window.addEventListener('beforeunload', (e) => {
