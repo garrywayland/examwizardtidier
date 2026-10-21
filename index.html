@@ -3729,6 +3729,9 @@ window.addEventListener('beforeunload', (e) => {
   #paper.compressed .marks { font-style: italic; font-size: 12.5px; color: #555; float: right; }
   #paper.compressed .part { margin: 2px 0 2px 22px; }
 
+  /* "Show marks" off: every marks tag, total line and the cover's total vanish. */
+  #paper.hide-marks .marks, #paper.hide-marks .qtotal, #paper.hide-marks .mark-tag, #paper.hide-marks .cp-marks { display: none !important; }
+
   #paper.exam .question { break-inside: avoid; page-break-after: always; padding-bottom: 4px; }
 
   /* Optional: pin [Total: N marks] to the bottom of the page instead of
@@ -4176,6 +4179,8 @@ window.addEventListener('beforeunload', (e) => {
     <div class="grp">
       <span class="grp-label">Text</span>
       <label><input type="checkbox" id="flattenToggle"> One line per section</label>
+      <label title="Untick to hide every [N marks] tag and [Total] line - the paper then carries no marks at all"><input type="checkbox" id="showMarksToggle" checked> Show marks</label>
+      <label title="Some sources put the lead-in for the next part after this part's answer blank. Tick to move that text to the start of the next part."><input type="checkbox" id="leadInToggle"> Fix text after answer blanks</label>
       <label>Image wrap
         <select id="defaultWrapSelect">
           <option value="none">Off</option>
@@ -5101,7 +5106,7 @@ function coverPageHTML(title, totalMarks) {
   <div class="cp-row"><span>Name:</span><span class="cp-line"></span></div>
   <div class="cp-row"><span>Class:</span><span class="cp-line"></span></div>
   <div class="cp-meta">
-    <span>Total marks: <strong>${totalMarks || '____'}</strong></span>
+    <span class="cp-marks">Total marks: <strong>${totalMarks || '____'}</strong></span>
     <span>Total pages: <strong class="cp-pages">&ndash;</strong></span>
   </div>
 </div>`;
@@ -6186,6 +6191,8 @@ const texBtn = document.getElementById('texBtn');
 const coverToggle = document.getElementById('coverToggle');
 const formulaSheetSelect = document.getElementById('formulaSheetSelect');
 const flattenToggle = document.getElementById('flattenToggle');
+const showMarksToggle = document.getElementById('showMarksToggle');
+const leadInToggle = document.getElementById('leadInToggle');
 const defaultWrapSelect = document.getElementById('defaultWrapSelect');
 const totalBottomToggle = document.getElementById('totalBottomToggle');
 const totalBottomLabel = document.getElementById('totalBottomLabel');
@@ -6698,9 +6705,10 @@ function rerender() {
   paperEl.className = paperClassName();
   const title = sourceFileName('Worksheet').replace(/\.(docx?|rtf)$/i, '').replace(/[_-]+/g, ' ');
   const showCover = coverToggle.checked;
+  const qs = displayQuestions();
   let html = showCover ? coverPageHTML(title, computeTotalMarks(currentQuestions)) : '';
   html += formulaSheetHTML(formulaSheetSelect.value);
-  if (!paged) html += renderPaper(currentQuestions, currentSizeMap, mode, title, {skipTitle: showCover});
+  if (!paged) html += renderPaper(qs, currentSizeMap, mode, title, {skipTitle: showCover});
   paperEl.innerHTML = html;
   // Paged layout: content first goes into a "stage" so every import pass
   // below runs on it unchanged, then paginateStage() moves it into pages.
@@ -6708,9 +6716,10 @@ function rerender() {
   if (paged) {
     stage = document.createElement('div');
     stage.className = 'pg-stage';
-    stage.innerHTML = buildPagedStageHTML(currentQuestions, currentSizeMap, onePerPageToggle.checked, title, !showCover);
+    stage.innerHTML = buildPagedStageHTML(qs, currentSizeMap, onePerPageToggle.checked, title, !showCover);
     paperEl.appendChild(stage);
   }
+  tagInlineMarks(paperEl);
   paperEl.style.display = 'block';
   paperEl.setAttribute('contenteditable', 'true');
   paperEl.setAttribute('spellcheck', 'false');
@@ -6750,10 +6759,49 @@ function rerender() {
 // restored saved paper stay consistent.
 function paperClassName() {
   const mode = modeSelect.value;
+  const hide = showMarksToggle.checked ? '' : ' hide-marks';
   if (mode === 'paged') {
-    return 'paged ' + (onePerPageToggle.checked ? 'pp-one' : 'pp-pack') + (pageNumsToggle.checked ? ' show-pagenums' : '');
+    return 'paged ' + (onePerPageToggle.checked ? 'pp-one' : 'pp-pack') + (pageNumsToggle.checked ? ' show-pagenums' : '') + hide;
   }
-  return mode + (totalBottomToggle.checked ? ' total-bottom' : '');
+  return mode + (totalBottomToggle.checked ? ' total-bottom' : '') + hide;
+}
+
+/* ---- Text left after an answer blank ---------------------------------------
+   Some sources put a part's own lead-in AFTER the previous part's answer
+   blank ("(a) ... ( ___ , ___ ) The point E has coordinates ..." then "(b)
+   Prove that ABE ..."). With "Fix text after answer blanks" ticked, any
+   substantial text after a part's last blank moves to the start of the next
+   part. Works on a copy at display time; the imported data is untouched.
+   Only run-based sources (ExamWizard RTF, Word) are handled. */
+const ANSWER_BLANK_END_RE = /_{4,}[\s\u2002,.;)\]]*(?:\[answer in [^\]]+\])?[\s)]*/g;
+function withLeadInsMoved(questions) {
+  return questions.map(q => {
+    if (!q.parts || q.parts.length < 2 || q.parts.some(p => !p.runs)) return q;
+    const parts = q.parts.map(p => ({...p, runs: p.runs.slice()}));
+    for (let i = 0; i < parts.length - 1; i++) {
+      const {text, runOf} = runsToIndexedText(parts[i].runs);
+      let end = -1, m;
+      ANSWER_BLANK_END_RE.lastIndex = 0;
+      while ((m = ANSWER_BLANK_END_RE.exec(text))) end = m.index + m[0].length;
+      if (end < 0 || text.slice(end).replace(/[\s\u0000]/g, '').length < 8) continue;
+      const moved = sliceRuns(parts[i].runs, runOf, end, text.length);
+      parts[i].runs = sliceRuns(parts[i].runs, runOf, 0, end);
+      const gap = {type: 'text', text: '\n\n', bold: false, italic: false, vert: null};
+      parts[i + 1].runs = moved.concat([gap], parts[i + 1].runs);
+    }
+    return {...q, parts};
+  });
+}
+// What is actually laid out: the imported questions, optionally tidied.
+function displayQuestions() {
+  return leadInToggle.checked ? withLeadInsMoved(currentQuestions) : currentQuestions;
+}
+// Inline "[5]"-style mark tags that some sources leave inside the text get a
+// class so "Show marks" can hide them too.
+function tagInlineMarks(root) {
+  root.querySelectorAll('.qbody div, .part div').forEach(d => {
+    if (!d.querySelector('div') && /^\[\d+\]$/.test(d.textContent.trim())) d.classList.add('mark-tag');
+  });
 }
 
 // Only show the options that mean something for the chosen layout.
@@ -6950,6 +6998,21 @@ formulaSheetSelect.addEventListener('change', () => {
   rerender();
 });
 
+// Hiding marks is just a class on the paper, so it never touches your edits.
+// In paged layout the pages are measured again afterwards (the page text keeps
+// whatever you typed), because showing the marks again takes room.
+showMarksToggle.addEventListener('change', () => {
+  paperEl.classList.toggle('hide-marks', !showMarksToggle.checked);
+  if (paperEl.classList.contains('paged') && paperEl.querySelector('.qpage')) repaginate();
+});
+leadInToggle.addEventListener('change', () => {
+  if (!confirmDiscardEdits('Moving text that follows answer blanks')) {
+    leadInToggle.checked = !leadInToggle.checked;
+    return;
+  }
+  rerender();
+});
+
 flattenToggle.addEventListener('change', () => {
   if (!confirmDiscardEdits('Toggling one-line sections')) {
     flattenToggle.checked = !flattenToggle.checked;
@@ -7046,7 +7109,10 @@ pdfBtn.addEventListener('click', () => {
 texBtn.addEventListener('click', () => {
   if (!currentQuestions) return;
   const title = sourceFileName('Worksheet').replace(/\.(docx?|rtf)$/i, '').replace(/[_-]+/g, ' ');
-  const tex = buildLatexDocument(currentQuestions, title);
+  const showMarks = showMarksToggle.checked;
+  const exportQs = displayQuestions().map(q => showMarks ? q :
+    {...q, marks: null, parts: q.parts.map(p => ({...p, marks: null}))});
+  const tex = buildLatexDocument(exportQs, title);
   const blob = new Blob([tex], {type: 'text/x-tex'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -7221,6 +7287,8 @@ async function serializeProject() {
     cover: coverToggle.checked,
     formulaSheet: formulaSheetSelect.value,
     flatten: flattenToggle.checked,
+    showMarks: showMarksToggle.checked,
+    leadIn: leadInToggle.checked,
     totalBottom: totalBottomToggle.checked,
     onePerPage: onePerPageToggle.checked,
     fillLines: fillLinesToggle.checked,
@@ -7323,6 +7391,8 @@ async function restoreProject(text) {
   formulaSheetSelect.value = p.formulaSheet || 'none';
   formulaSheetSelect.dataset.prev = formulaSheetSelect.value;
   flattenToggle.checked = p.flatten;
+  showMarksToggle.checked = p.showMarks !== false;
+  leadInToggle.checked = !!p.leadIn;
   totalBottomToggle.checked = p.totalBottom;
   onePerPageToggle.checked = p.onePerPage !== false;
   fillLinesToggle.checked = p.fillLines !== false;
