@@ -223,6 +223,16 @@
     box-sizing: border-box;
   }
   #eq-modal .eq-render-preview { margin: 8px 0; min-height: 20px; }
+  #eq-modal .eq-editor-link { font-size: 11.5px; margin: 0 0 8px; color: #555; }
+  #eq-modal .eq-editor-link a { color: var(--accent); }
+  #eq-modal details.eq-palette { margin-top: 10px; border-top: 1px solid var(--rule); padding-top: 8px; }
+  #eq-modal details.eq-palette summary { cursor: pointer; font-size: 12px; color: #555; }
+  #eq-modal .eq-pal-group { margin-top: 8px; }
+  #eq-modal .eq-pal-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: #999; margin-bottom: 3px; }
+  #eq-modal .eq-pal-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+  #eq-modal .eq-pal-btns button { padding: 3px 7px; min-width: 32px; font-size: 12px; background: #fff; line-height: 1.3; }
+  #eq-modal .eq-pal-btns button:hover { border-color: var(--accent); background: #faf7f0; }
+  #eq-modal .eq-pal-btns .katex { font-size: 1em; }
   #eq-modal .eq-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   #eq-modal button {
     font-family: var(--mono); font-size: 12.5px; padding: 7px 12px; border-radius: 4px;
@@ -596,8 +606,12 @@
     <h3>Equation</h3>
     <div class="eq-preview" id="eq-modal-img-wrap"></div>
     <div class="eq-status" id="eq-modal-status"></div>
+    <div class="eq-editor-link">Need something else? Build it in the
+      <a href="https://latexeditor.lagrida.com/" target="_blank" rel="noopener">LaTeX equation editor &#8599;</a>
+      (opens in a new tab), copy the LaTeX it gives you and paste it below.</div>
     <textarea id="eq-modal-input" placeholder="Type LaTeX here, e.g. \frac{a}{b}"></textarea>
     <div class="eq-render-preview" id="eq-modal-render"></div>
+    <details class="eq-palette" id="eq-palette"><summary>Common equations &mdash; click to insert</summary></details>
     <div class="eq-row">
       <button id="eq-modal-auto" type="button">Try automatic read</button>
       <button id="eq-modal-apply" type="button" class="primary">Use this</button>
@@ -2796,6 +2810,91 @@ function renderEqPreview() {
   catch (e) { eqModalRender.textContent = '(preview failed)'; }
 }
 eqModalInput.addEventListener('input', renderEqPreview);
+
+/* ---- Common-equation palette ----------------------------------------------
+   Each entry is [LaTeX, tooltip]. A "§" marks where the caret lands after
+   inserting (first {} placeholder), and is removed. Buttons show the rendered
+   maths when KaTeX is available. Kept to GCSE / A Level staples. */
+const EQ_PALETTE = [
+  ['Fractions, powers, roots', [
+    ['\\frac{§}{b}', 'Fraction'], ['x^{§}', 'Power'], ['x_{§}', 'Subscript'],
+    ['\\sqrt{§}', 'Square root'], ['\\sqrt[3]{§}', 'Cube root'], ['\\left(§\\right)', 'Brackets that grow'],
+    ['\\left|§\\right|', 'Modulus'], ['\\pm', 'Plus or minus'],
+  ]],
+  ['Vectors', [
+    ['\\overrightarrow{AB}', 'Vector AB'], ['\\mathbf{a}', 'Bold vector a'],
+    ['\\begin{pmatrix} § \\\\ b \\end{pmatrix}', 'Column vector (2D)'],
+    ['\\begin{pmatrix} § \\\\ b \\\\ c \\end{pmatrix}', 'Column vector (3D)'],
+    ['\\mathbf{i}', 'i'], ['\\mathbf{j}', 'j'], ['\\mathbf{k}', 'k'], ['|\\mathbf{a}|', 'Magnitude'],
+  ]],
+  ['Matrices', [
+    ['\\begin{pmatrix} § & b \\\\ c & d \\end{pmatrix}', '2 by 2 matrix'],
+    ['\\begin{vmatrix} § & b \\\\ c & d \\end{vmatrix}', 'Determinant'],
+    ['\\mathbf{M}^{-1}', 'Inverse'], ['\\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix}', 'Identity'],
+  ]],
+  ['Calculus', [
+    ['\\frac{dy}{dx}', 'dy/dx'], ['\\frac{d^{2}y}{dx^{2}}', 'Second derivative'],
+    ['\\int § \\,dx', 'Integral'], ['\\int_{a}^{b} § \\,dx', 'Definite integral'],
+    ['\\sum_{r=1}^{n}§', 'Sum'], ['\\lim_{x \\to §}', 'Limit'],
+  ]],
+  ['Trig, logs, exponentials', [
+    ['\\sin §', 'sin'], ['\\cos §', 'cos'], ['\\tan §', 'tan'], ['\\theta', 'theta'], ['\\pi', 'pi'],
+    ['^{\\circ}', 'Degrees'], ['\\ln §', 'ln'], ['\\log_{§}', 'log base'], ['e^{§}', 'e to the power'],
+  ]],
+  ['Symbols', [
+    ['\\times', 'Times'], ['\\div', 'Divide'], ['\\leq', 'Less than or equal'], ['\\geq', 'Greater than or equal'],
+    ['\\neq', 'Not equal'], ['\\approx', 'Approximately'], ['\\infty', 'Infinity'], ['\\therefore', 'Therefore'],
+    ['\\Rightarrow', 'Implies'], ['\\in', 'Element of'], ['\\cup', 'Union'], ['\\cap', 'Intersection'],
+  ]],
+  ['Statistics', [
+    ['\\bar{x}', 'Mean'], ['\\mu', 'mu'], ['\\sigma', 'sigma'], ['\\binom{n}{r}', 'nCr'],
+    ['X \\sim N(\\mu, \\sigma^{2})', 'Normal distribution'], ['X \\sim B(n, p)', 'Binomial distribution'],
+    ['P(A \\mid B)', 'Conditional probability'], ['\\sum x^{2}', 'Sum of x squared'],
+  ]],
+];
+
+function insertIntoEqInput(snippet) {
+  const ta = eqModalInput;
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const bar = snippet.indexOf('§');
+  const hasMarker = EQ_CARET_SNIPPETS.has(snippet);
+  const text = hasMarker ? snippet.replace('§', '') : snippet;
+  const selected = ta.value.slice(start, end);
+  const out = (hasMarker && selected) ? snippet.replace('§', selected) : text;
+  ta.setRangeText(out, start, end, 'end');
+  if (hasMarker && !selected) {
+    const caret = start + bar;
+    ta.setSelectionRange(caret, caret);
+  }
+  ta.focus();
+  renderEqPreview();
+}
+const EQ_CARET_SNIPPETS = new Set();
+
+(function buildEqPalette() {
+  const host = document.getElementById('eq-palette');
+  EQ_PALETTE.forEach(([title, items]) => {
+    const group = document.createElement('div');
+    group.className = 'eq-pal-group';
+    group.innerHTML = `<div class="eq-pal-title">${title}</div><div class="eq-pal-btns"></div>`;
+    const row = group.querySelector('.eq-pal-btns');
+    items.forEach(([latex, tip]) => {
+      if (latex.includes('§')) EQ_CARET_SNIPPETS.add(latex);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.title = tip;
+      const preview = latex.replace('§', '\\square');
+      if (typeof katex !== 'undefined') {
+        try { katex.render(preview, b, {throwOnError: false}); }
+        catch (e) { b.textContent = tip; }
+      } else { b.textContent = tip; }
+      b.addEventListener('mousedown', (e) => e.preventDefault()); // keep the caret in the box
+      b.addEventListener('click', () => insertIntoEqInput(latex));
+      row.appendChild(b);
+    });
+    host.appendChild(group);
+  });
+})();
 
 eqModalAuto.addEventListener('click', async () => {
   if (!eqModalTarget || eqModalTarget.tagName !== 'IMG') return;
