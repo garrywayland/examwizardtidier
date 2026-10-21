@@ -616,7 +616,7 @@
       (opens in a new tab), copy the LaTeX it gives you and paste it below.</div>
     <textarea id="eq-modal-input" placeholder="Type LaTeX here, e.g. \frac{a}{b}"></textarea>
     <div class="eq-render-preview" id="eq-modal-render"></div>
-    <details class="eq-palette" id="eq-palette"><summary>Common equations &mdash; click to insert</summary></details>
+    <details class="eq-palette" id="eq-palette"><summary>Common equations &mdash; click to insert, then Tab between the boxes</summary></details>
     <div class="eq-row">
       <button id="eq-modal-auto" type="button">Try automatic read</button>
       <button id="eq-modal-apply" type="button" class="primary">Use this</button>
@@ -2819,34 +2819,37 @@ function renderEqPreview() {
 eqModalInput.addEventListener('input', renderEqPreview);
 
 /* ---- Common-equation palette ----------------------------------------------
-   Each entry is [LaTeX, tooltip]. A "§" marks where the caret lands after
-   inserting (first {} placeholder), and is removed. Buttons show the rendered
-   maths when KaTeX is available. Kept to GCSE / A Level staples. */
+   Each entry is [LaTeX, tooltip]. Every blank to fill in is a \square (it
+   shows as an empty box in the preview). After a button inserts its template
+   the first box is selected, so typing replaces it; Tab / Shift+Tab then jump
+   to the next / previous box - nothing is left over to delete. Kept to
+   GCSE / A Level staples. */
+const EQ_SLOT = '\\square';
 const EQ_PALETTE = [
   ['Fractions, powers, roots', [
-    ['\\frac{§}{b}', 'Fraction'], ['x^{§}', 'Power'], ['x_{§}', 'Subscript'],
-    ['\\sqrt{§}', 'Square root'], ['\\sqrt[3]{§}', 'Cube root'], ['\\left(§\\right)', 'Brackets that grow'],
-    ['\\left|§\\right|', 'Modulus'], ['\\pm', 'Plus or minus'],
+    ['\\frac{\\square}{\\square}', 'Fraction'], ['\\square^{\\square}', 'Power'], ['\\square_{\\square}', 'Subscript'],
+    ['\\sqrt{\\square}', 'Square root'], ['\\sqrt[3]{\\square}', 'Cube root'], ['\\left(\\square\\right)', 'Brackets that grow'],
+    ['\\left|\\square\\right|', 'Modulus'], ['\\pm', 'Plus or minus'],
   ]],
   ['Vectors', [
-    ['\\overrightarrow{AB}', 'Vector AB'], ['\\mathbf{a}', 'Bold vector a'],
-    ['\\begin{pmatrix} § \\\\ b \\end{pmatrix}', 'Column vector (2D)'],
-    ['\\begin{pmatrix} § \\\\ b \\\\ c \\end{pmatrix}', 'Column vector (3D)'],
-    ['\\mathbf{i}', 'i'], ['\\mathbf{j}', 'j'], ['\\mathbf{k}', 'k'], ['|\\mathbf{a}|', 'Magnitude'],
+    ['\\overrightarrow{\\square}', 'Vector with arrow, e.g. AB'], ['\\mathbf{\\square}', 'Bold vector'],
+    ['\\begin{pmatrix} \\square \\\\ \\square \\end{pmatrix}', 'Column vector (2D)'],
+    ['\\begin{pmatrix} \\square \\\\ \\square \\\\ \\square \\end{pmatrix}', 'Column vector (3D)'],
+    ['\\mathbf{i}', 'i'], ['\\mathbf{j}', 'j'], ['\\mathbf{k}', 'k'], ['\\left|\\mathbf{\\square}\\right|', 'Magnitude'],
   ]],
   ['Matrices', [
-    ['\\begin{pmatrix} § & b \\\\ c & d \\end{pmatrix}', '2 by 2 matrix'],
-    ['\\begin{vmatrix} § & b \\\\ c & d \\end{vmatrix}', 'Determinant'],
+    ['\\begin{pmatrix} \\square & \\square \\\\ \\square & \\square \\end{pmatrix}', '2 by 2 matrix'],
+    ['\\begin{vmatrix} \\square & \\square \\\\ \\square & \\square \\end{vmatrix}', 'Determinant'],
     ['\\mathbf{M}^{-1}', 'Inverse'], ['\\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix}', 'Identity'],
   ]],
   ['Calculus', [
     ['\\frac{dy}{dx}', 'dy/dx'], ['\\frac{d^{2}y}{dx^{2}}', 'Second derivative'],
-    ['\\int § \\,dx', 'Integral'], ['\\int_{a}^{b} § \\,dx', 'Definite integral'],
-    ['\\sum_{r=1}^{n}§', 'Sum'], ['\\lim_{x \\to §}', 'Limit'],
+    ['\\int \\square \\,dx', 'Integral'], ['\\int_{\\square}^{\\square} \\square \\,dx', 'Definite integral'],
+    ['\\sum_{r=1}^{\\square}\\square', 'Sum'], ['\\lim_{x \\to \\square}', 'Limit'],
   ]],
   ['Trig, logs, exponentials', [
-    ['\\sin §', 'sin'], ['\\cos §', 'cos'], ['\\tan §', 'tan'], ['\\theta', 'theta'], ['\\pi', 'pi'],
-    ['^{\\circ}', 'Degrees'], ['\\ln §', 'ln'], ['\\log_{§}', 'log base'], ['e^{§}', 'e to the power'],
+    ['\\sin \\square', 'sin'], ['\\cos \\square', 'cos'], ['\\tan \\square', 'tan'], ['\\theta', 'theta'], ['\\pi', 'pi'],
+    ['^{\\circ}', 'Degrees'], ['\\ln \\square', 'ln'], ['\\log_{\\square} \\square', 'log base'], ['e^{\\square}', 'e to the power'],
   ]],
   ['Symbols', [
     ['\\times', 'Times'], ['\\div', 'Divide'], ['\\leq', 'Less than or equal'], ['\\geq', 'Greater than or equal'],
@@ -2854,29 +2857,41 @@ const EQ_PALETTE = [
     ['\\Rightarrow', 'Implies'], ['\\in', 'Element of'], ['\\cup', 'Union'], ['\\cap', 'Intersection'],
   ]],
   ['Statistics', [
-    ['\\bar{x}', 'Mean'], ['\\mu', 'mu'], ['\\sigma', 'sigma'], ['\\binom{n}{r}', 'nCr'],
-    ['X \\sim N(\\mu, \\sigma^{2})', 'Normal distribution'], ['X \\sim B(n, p)', 'Binomial distribution'],
+    ['\\bar{x}', 'Mean'], ['\\mu', 'mu'], ['\\sigma', 'sigma'], ['\\binom{\\square}{\\square}', 'nCr'],
+    ['X \\sim N(\\square, \\square^{2})', 'Normal distribution'], ['X \\sim B(\\square, \\square)', 'Binomial distribution'],
     ['P(A \\mid B)', 'Conditional probability'], ['\\sum x^{2}', 'Sum of x squared'],
   ]],
 ];
 
+// Select the next (dir 1) or previous (dir -1) blank box after the caret.
+// Returns false when there is none, so Tab can behave normally.
+function selectEqSlot(from, dir) {
+  const ta = eqModalInput;
+  const v = ta.value;
+  const i = dir > 0 ? v.indexOf(EQ_SLOT, from) : v.lastIndexOf(EQ_SLOT, from - 1);
+  if (i < 0) return false;
+  ta.setSelectionRange(i, i + EQ_SLOT.length);
+  return true;
+}
+
 function insertIntoEqInput(snippet) {
   const ta = eqModalInput;
   const start = ta.selectionStart, end = ta.selectionEnd;
-  const bar = snippet.indexOf('§');
-  const hasMarker = EQ_CARET_SNIPPETS.has(snippet);
-  const text = hasMarker ? snippet.replace('§', '') : snippet;
   const selected = ta.value.slice(start, end);
-  const out = (hasMarker && selected) ? snippet.replace('§', selected) : text;
+  // Text selected before clicking goes into the first box.
+  const out = (selected && selected !== EQ_SLOT) ? snippet.replace(EQ_SLOT, selected) : snippet;
   ta.setRangeText(out, start, end, 'end');
-  if (hasMarker && !selected) {
-    const caret = start + bar;
-    ta.setSelectionRange(caret, caret);
-  }
   ta.focus();
+  if (!selectEqSlot(start, 1)) ta.setSelectionRange(start + out.length, start + out.length);
   renderEqPreview();
 }
-const EQ_CARET_SNIPPETS = new Set();
+
+eqModalInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const ta = eqModalInput;
+  const from = e.shiftKey ? ta.selectionStart : ta.selectionEnd;
+  if (selectEqSlot(from, e.shiftKey ? -1 : 1)) e.preventDefault();
+});
 
 (function buildEqPalette() {
   const host = document.getElementById('eq-palette');
@@ -2886,13 +2901,11 @@ const EQ_CARET_SNIPPETS = new Set();
     group.innerHTML = `<div class="eq-pal-title">${title}</div><div class="eq-pal-btns"></div>`;
     const row = group.querySelector('.eq-pal-btns');
     items.forEach(([latex, tip]) => {
-      if (latex.includes('§')) EQ_CARET_SNIPPETS.add(latex);
       const b = document.createElement('button');
       b.type = 'button';
       b.title = tip;
-      const preview = latex.replace('§', '\\square');
       if (typeof katex !== 'undefined') {
-        try { katex.render(preview, b, {throwOnError: false}); }
+        try { katex.render(latex, b, {throwOnError: false}); }
         catch (e) { b.textContent = tip; }
       } else { b.textContent = tip; }
       b.addEventListener('mousedown', (e) => e.preventDefault()); // keep the caret in the box
